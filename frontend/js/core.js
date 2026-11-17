@@ -1,12 +1,16 @@
 // Core: API client, session state, router, shells, event delegation, realtime.
-import { esc, icon, MARK, toast, av, ago } from './ui.js';
+import { esc, icon, MARK, toast, av, ago, rulerHtml, dockHtml, startRulerClock } from './ui.js';
 
 /* ---------- API ---------- */
+// API_BASE is configured via window.__CA_CONFIG__.apiBase (set in index.html or by the dev server).
+// When served by the backend directly, it defaults to '' (same origin).
+const API_BASE = (window.__CA_CONFIG__?.apiBase || '').replace(/\/$/, '');
+
 export async function api(path, { method = 'GET', body, form } = {}) {
-  const opts = { method, headers: { 'X-CA-CSRF': '1' }, credentials: 'same-origin' };
+  const opts = { method, headers: { 'X-CA-CSRF': '1' }, credentials: API_BASE ? 'include' : 'same-origin' };
   if (form) opts.body = form; else if (body !== undefined) { opts.headers['Content-Type'] = 'application/json'; opts.body = JSON.stringify(body); }
   let res;
-  try { res = await fetch(`/api${path}`, opts); } catch { throw Object.assign(new Error('Could not reach the server. Check your connection and try again.'), { status: 0 }); }
+  try { res = await fetch(`${API_BASE}/api${path}`, opts); } catch { throw Object.assign(new Error('Could not reach the server. Check your connection and try again.'), { status: 0 }); }
   const data = res.headers.get('content-type')?.includes('json') ? await res.json() : {};
   if (!res.ok && !(res.status === 429 && data.result)) throw Object.assign(new Error(data.error || `Request failed (${res.status}).`), { status: res.status, data });
   return data;
@@ -36,6 +40,7 @@ export async function render({ keepScroll = false } = {}) {
   document.getElementById('root').innerHTML = shellFor(c, html);
   document.title = `${title || c.r.title || 'CipherArena'}${title || c.r.title ? ' · CipherArena' : ''}`;
   mount?.(document.getElementById('root'));
+  startRulerClock();
   if (keepScroll) scrollTo(0, y);
   connectStream(c);
 }
@@ -84,10 +89,10 @@ function topbar(c, { menu = false } = {}) {
   return `<header class="topbar">${menu ? `<button class="iconbtn menu-btn" data-act="side" aria-label="Open navigation">${icon('menu', 18)}</button>` : ''}
     <a class="brand" href="#/">${MARK}<span class="word">Cipher<b>Arena</b></span></a>
     <nav class="topnav" aria-label="Main">${nav.map(([h, l]) => `<a href="#${h}" class="${p.startsWith(h) ? 'on' : ''}">${l}</a>`).join('')}</nav><span class="spacer"></span>
-    <div class="tools">${me ? `<a class="iconbtn hide-m" href="#/dashboard">Dashboard</a>
+    <div class="tools">${me ? `<a class="btn sm hide-m" href="#/dashboard">Dashboard</a>
       <div style="position:relative;display:flex"><button class="iconbtn" data-act="notifs" data-pop aria-label="Notifications">${icon('bell', 17)}${state.unread ? `<span class="badge-dot">${state.unread > 9 ? '9+' : state.unread}</span>` : ''}</button></div>
-      <div style="position:relative;display:flex"><button class="iconbtn" data-act="usermenu" data-pop aria-label="Account menu">${av(me.username)}</button></div>`
-      : `<a class="iconbtn" href="#/login">Sign in</a><a class="iconbtn" href="#/signup" style="color:var(--text);background:var(--signal)">Create account</a>`}</div></header>`;
+      <div style="position:relative;display:flex"><button class="iconbtn" data-act="usermenu" data-pop aria-label="Account menu" style="padding:0 8px">${av(me.username)}</button></div>`
+      : `<a class="btn ghost sm" href="#/login">Sign in</a><a class="btn primary sm" href="#/signup">Create account</a>`}</div></header>`;
 }
 function sideLink(href, label, cur, n, alert) { return `<a class="nav ${cur ? 'on' : ''}" href="#${href}">${esc(label)}${n != null ? `<span class="n ${alert ? 'alert' : ''}">${n}</span>` : ''}</a>`; }
 export const sideExtra = { manage: null, arena: null };
@@ -108,14 +113,16 @@ function arenaSide(c) {
     <div class="grp label">You</div>${sideLink('/dashboard', 'Dashboard', false)}${sideLink('/teams', 'Teams', false)}
     ${a?.team ? `<div class="foot"><div class="label">${esc(a.team.name || 'Solo')}</div><div class="row between" style="margin-top:8px"><span class="dim small">Rank</span><span class="mono">#${a.team.rank} / ${a.team.of}</span></div><div class="row between"><span class="dim small">Points</span><span class="mono">${a.team.points}</span></div><div class="row between"><span class="dim small">Solved</span><span class="mono">${a.team.solved}</span></div></div>` : ''}`;
 }
-function footer() { return `<footer class="footer"><span>CipherArena · open-source CTF platform</span><span class="row" style="gap:18px"><a href="#/verify">Verify a certificate</a><a href="#/orgs">Organizations</a><a href="#/events">Competitions</a></span></footer>`; }
+function footer() { return `<footer class="footer"><span>Cipher<b>Arena</b> · Design-Crafted CTF Platform</span><span class="row" style="gap:18px"><a href="#/verify">Verify certificate</a><a href="#/orgs">Organizations</a><a href="#/events">Competitions</a></span></footer>`; }
 function shellFor(c, html) {
   const sh = c.r.shell || 'public';
   if (sh === 'bare') return html;
-  if (sh === 'auth') return topbar(c) + html;
-  if (sh === 'public') return topbar(c) + `<main id="main">${html}</main>` + footer();
+  const r = rulerHtml();
+  const d = dockHtml(c.path, state.me);
+  if (sh === 'auth') return r + topbar(c) + html + d;
+  if (sh === 'public') return r + topbar(c) + `<main id="main">${html}</main>` + footer() + d;
   const side = sh === 'arena' ? arenaSide(c) : appSide(c);
-  return topbar(c, { menu: true }) + `<div class="app"><aside class="side" aria-label="Section navigation">${side}</aside><main class="main" id="main">${html}</main></div>`;
+  return r + topbar(c, { menu: true }) + `<div class="app"><aside class="side" aria-label="Section navigation">${side}</aside><main class="main" id="main">${html}</main></div>` + d;
 }
 
 /* ---------- popovers ---------- */
@@ -143,7 +150,7 @@ function connectStream(c) {
   const slug = (c.path.match(/^\/(?:arena|manage)\/([^/]+)/) || [])[1];
   const key = `${state.me?.id || 'anon'}:${slug && slug !== 'new' ? slug : ''}`;
   if (key === esKey) return; esKey = key; es?.close();
-  es = new EventSource(`/api/stream${slug && slug !== 'new' ? `?event=${encodeURIComponent(slug)}` : ''}`);
+  es = new EventSource(`${API_BASE}/api/stream${slug && slug !== 'new' ? `?event=${encodeURIComponent(slug)}` : ''}`);
   es.onmessage = (m) => { let d; try { d = JSON.parse(m.data); } catch { return; }
     if (d.type === 'notification') { state.unread++; const b = document.querySelector('[data-act="notifs"]'); if (b) { let dot = b.querySelector('.badge-dot'); if (!dot) { dot = document.createElement('span'); dot.className = 'badge-dot'; b.appendChild(dot); } dot.textContent = state.unread > 9 ? '9+' : state.unread; } toast(d.title, 'info'); }
     if (d.type === 'announcement') toast(`Announcement: ${d.title}`, 'info');

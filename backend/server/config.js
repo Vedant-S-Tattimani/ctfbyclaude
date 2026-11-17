@@ -26,12 +26,16 @@ function persistentSecret() {
   return fs.readFileSync(f, 'utf8').trim();
 }
 
+// Resolve the frontend directory: defaults to ../frontend (sibling folder in monorepo layout)
+const frontendDir = path.resolve(ROOT, process.env.FRONTEND_DIR || path.join('..', 'frontend'));
+
 export const config = {
   port: Number(process.env.PORT || 3000),
   host: process.env.HOST || '0.0.0.0',
   prod: process.env.NODE_ENV === 'production',
   baseUrl: process.env.BASE_URL || `http://localhost:${process.env.PORT || 3000}`,
   dataDir,
+  frontendDir,
   dbPath: path.join(dataDir, process.env.DB_FILE || 'cipherarena.db'),
   uploadDir: path.join(dataDir, 'uploads'),
   secret: persistentSecret(),
@@ -49,5 +53,7 @@ export const config = {
   // Secure cookies need HTTPS. Defaults on in production; set COOKIE_SECURE=0 to test production mode over plain HTTP.
   cookieSecure: process.env.COOKIE_SECURE ? process.env.COOKIE_SECURE === '1' : process.env.NODE_ENV === 'production',
   trustProxy: process.env.TRUST_PROXY === '1',
+  // CORS origin for frontend dev server (empty = same-origin only). Set to http://localhost:5500 etc.
+  corsOrigin: process.env.CORS_ORIGIN || '',
 };
 fs.mkdirSync(config.uploadDir, { recursive: true });

@@ -16,7 +16,77 @@ const P = {
   trash: '<path d="M4 7h16M10 11v6M14 11v6M6 7l1 14h10l1-14M9 7V4h6v3"/>', edit: '<path d="M4 20h4L19 9l-4-4L4 16z"/>', logout: '<path d="M15 4h4v16h-4M10 8l-4 4 4 4M6 12h11"/>', upload: '<path d="M12 21V9M7 14l5-5 5 5M4 3h16"/>',
 };
 export const icon = (n, s = 15, cls = '') => `<svg class="${cls}" width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="square" stroke-linejoin="miter" aria-hidden="true">${P[n] || ''}</svg>`;
-export const MARK = '<svg class="mark" viewBox="0 0 32 32" aria-hidden="true"><path d="M16 4 5 28h5l2-4.6h8L22 28h5L16 4zm0 10.2 2.4 5.3h-4.8L16 14.2z" fill="#e02149"/><path d="M1 17h5M26 17h5" stroke="#e02149" stroke-width="2"/></svg>';
+export const MARK = '<svg class="mark" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="8" fill="#111212"/><path d="M16 6 L26 24 L6 24 Z" fill="none" stroke="#36C5F0" stroke-width="2.5" stroke-linejoin="round"/><circle cx="16" cy="18" r="2.5" fill="#FFFFFF"/></svg>';
+
+export const STAR = '<svg class="nudge-star" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 0L14.6 9.4L24 12L14.6 14.6L12 24L9.4 14.6L0 12L9.4 9.4L12 0Z"/></svg>';
+export const UNDERLINE = '<svg class="nudge-underline" viewBox="0 0 260 20" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M2.5 14.5C65.5 3.5 178 -3.5 257.5 14" stroke="#36C5F0" stroke-width="4" stroke-linecap="round"/></svg>';
+
+export function rulerHtml() {
+  let ticks = '';
+  for (let px = 0; px <= 2600; px += 50) {
+    const isMajor = px % 100 === 0;
+    ticks += `<div class="ruler-tick ${isMajor ? 'major' : 'minor'}"><span class="ruler-num">${isMajor ? px : ''}</span></div>`;
+  }
+  return `<div class="ruler" id="ruler" aria-hidden="true">
+    <div class="ruler-track">${ticks}</div>
+    <div class="ruler-meta">
+      <div class="ruler-status"><span class="ruler-dot"></span><span class="ruler-status-text">CIPHERARENA · ONLINE</span></div>
+      <div class="ruler-time" id="ruler-clock">00:00:00</div>
+    </div>
+  </div>`;
+}
+
+let clockStarted = false;
+export function startRulerClock() {
+  if (clockStarted) return;
+  clockStarted = true;
+  function tick() {
+    const el = document.getElementById('ruler-clock');
+    if (!el) return;
+    const now = new Date();
+    el.textContent = now.toLocaleTimeString('en-US', { hour12: true, hour: '2-digit', minute: '2-digit', second: '2-digit' }) + ' LOCAL';
+  }
+  setInterval(tick, 1000);
+  setTimeout(tick, 50);
+}
+
+export function dockHtml(currentPath, me) {
+  const p = currentPath || '';
+  const links = [
+    { href: '#/events', label: 'Competitions', icon: 'grid', active: p.startsWith('/events') },
+    { href: '#/practice', label: 'Practice', icon: 'sparkle', active: p === '/practice' },
+    { href: '#/leaderboard', label: 'Scoreboard', icon: 'trophy', active: p === '/leaderboard' },
+  ];
+  if (me) {
+    links.push({ href: '#/dashboard', label: 'Dashboard', icon: 'target', active: p === '/dashboard' });
+    if (me.role !== 'participant') {
+      links.push({ href: '#/manage', label: 'Organize', icon: 'server', active: p.startsWith('/manage') });
+    }
+  } else {
+    links.push({ href: '#/login', label: 'Sign in', icon: 'user', active: p === '/login' || p === '/signup' });
+  }
+
+  return `<nav class="floating-dock" aria-label="Quick navigation">
+    <div class="dock-inner">
+      <a class="dock-brand" href="#/" title="CipherArena Home">
+        <span class="dock-avatar">${MARK}</span>
+      </a>
+      <div class="dock-divider"></div>
+      <div class="dock-links">
+        ${links.map((l) => `<a href="${l.href}" class="dock-item ${l.active ? 'on' : ''}" title="${l.label}">
+          ${icon(l.icon, 16)}
+          <span class="dock-label">${l.label}</span>
+        </a>`).join('')}
+      </div>
+      ${me ? `
+      <div class="dock-divider"></div>
+      <a class="dock-user" href="#/u/${esc(me.username)}" title="Profile (@${esc(me.username)})">
+        ${av(me.username, 'dock-av')}
+      </a>` : ''}
+    </div>
+  </nav>`;
+}
+
 
 export const CAT = { web: ['WEB', 'Web Exploitation'], crypto: ['CRY', 'Cryptography'], rev: ['REV', 'Reverse Engineering'], pwn: ['PWN', 'Binary Exploitation'], forensics: ['FOR', 'Digital Forensics'], osint: ['OSI', 'OSINT'], misc: ['MSC', 'Miscellaneous'], hardware: ['HW', 'Hardware'], stego: ['STG', 'Steganography'], network: ['NET', 'Network Security'] };
 export const catCode = (c) => CAT[c]?.[0] || c.toUpperCase().slice(0, 3);
@@ -24,8 +94,8 @@ export const catName = (c) => CAT[c]?.[1] || c;
 export const DIFF = ['', 'Beginner', 'Easy', 'Medium', 'Hard', 'Insane'];
 export const diff = (d) => `<span class="diff" title="${DIFF[d]}" aria-label="Difficulty: ${DIFF[d]}">${[1, 2, 3, 4, 5].map((i) => `<i class="${i <= d ? 'on' : ''}"></i>`).join('')}</span>`;
 export const tag = (t, cls = '') => `<span class="tag ${cls}">${t}</span>`;
-export const phaseTag = (p, practice) => practice ? tag('Always open', 'info') : ({ live: tag('Live', 'live'), upcoming: tag('Upcoming', 'info'), ended: tag('Ended') }[p] || tag(p));
-const PALETTE = ['#6d1428', '#24395f', '#2f4d33', '#5a4317', '#47285e', '#1f4a4a', '#5c2a2a', '#2c3a48'];
+export const phaseTag = (p, practice) => practice ? tag('Always open', 'info') : ({ live: tag('Live now', 'live'), upcoming: tag('Upcoming', 'info'), ended: tag('Ended') }[p] || tag(p));
+const PALETTE = ['#111212', '#36C5F0', '#E01E5A', '#2FBC81', '#ECB22E', '#3B82F6', '#6366F1', '#8B5CF6'];
 export const avColor = (s) => { let h = 0; for (const c of String(s)) h = (h * 31 + c.charCodeAt(0)) >>> 0; return PALETTE[h % PALETTE.length]; };
 export const initials = (s) => (String(s).replace(/[^A-Za-z0-9 ]/g, ' ').trim().split(/\s+/).map((w) => w[0]).join('').slice(0, 2) || String(s).slice(0, 2)).toUpperCase();
 export const av = (name, cls = '') => `<span class="av ${cls}" style="background:${avColor(name)}">${esc(initials(name))}</span>`;
@@ -94,7 +164,7 @@ export function areaChart(vals, labels, { h = 150, max: mx, title = '' } = {}) {
   const L = vals.length - 1;
   return `<div class="chart" role="img" aria-label="${esc(title)}"><svg viewBox="0 0 ${W} ${h}" preserveAspectRatio="none" style="height:${h}px">
     ${ticks.map((t) => `<line x1="0" x2="${W}" y1="${y(t)}" y2="${y(t)}" stroke="var(--rule)" vector-effect="non-scaling-stroke"/>`).join('')}
-    <path d="${line}L${x(L)},${h}L0,${h}Z" fill="rgba(196,24,58,.13)"/><path d="${line}" fill="none" stroke="var(--signal-2)" stroke-width="2" vector-effect="non-scaling-stroke"/>${hits}</svg>
+    <path d="${line}L${x(L)},${h}L0,${h}Z" fill="rgba(54,197,240,.16)"/><path d="${line}" fill="none" stroke="var(--signal-2)" stroke-width="2" vector-effect="non-scaling-stroke"/>${hits}</svg>
     <span class="yl" style="top:${y(ticks[2])}px">${fmt(ticks[2])}</span>
     <div class="axis"><span>${esc(labels[0])}</span><span>${esc(labels[Math.floor(L / 2)])}</span><span>${esc(labels[L])}</span></div></div>`;
 }

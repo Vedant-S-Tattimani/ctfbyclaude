@@ -1,6 +1,8 @@
 // CipherArena HTTP server.
 import express from 'express';
+import cors from 'cors';
 import path from 'node:path';
+import fs from 'node:fs';
 import { config, ROOT } from './config.js';
 import './db.js';
 import { HttpError, sessionMiddleware, csrfGuard } from './lib.js';
@@ -15,15 +17,27 @@ export function createApp() {
   app.disable('x-powered-by');
   if (config.trustProxy) app.set('trust proxy', 1);
 
+  // CORS: allow the frontend dev server origin when configured
+  if (config.corsOrigin) {
+    app.use(cors({
+      origin: config.corsOrigin,
+      credentials: true,
+      allowedHeaders: ['Content-Type', 'X-CA-CSRF'],
+    }));
+  }
+
   app.use((req, res, next) => {
     res.setHeader('X-Content-Type-Options', 'nosniff');
     res.setHeader('X-Frame-Options', 'DENY');
     res.setHeader('Referrer-Policy', 'same-origin');
     res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
-    res.setHeader('Content-Security-Policy', [
-      "default-src 'self'", "script-src 'self'", "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
-      "font-src 'self' https://fonts.gstatic.com", "img-src 'self' data: blob:", "connect-src 'self'", "frame-ancestors 'none'", "base-uri 'self'", "form-action 'self'",
-    ].join('; '));
+    // Only set CSP in production or when serving frontend from the same origin
+    if (!config.corsOrigin) {
+      res.setHeader('Content-Security-Policy', [
+        "default-src 'self'", "script-src 'self'", "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+        "font-src 'self' https://fonts.gstatic.com", "img-src 'self' data: blob:", "connect-src 'self'", "frame-ancestors 'none'", "base-uri 'self'", "form-action 'self'",
+      ].join('; '));
+    }
     if (config.prod) res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
     next();
   });
@@ -33,8 +47,12 @@ export function createApp() {
   app.get('/api/health', (_req, res) => res.json({ ok: true }));
   app.use('/api', (_req, _res, next) => next(new HttpError(404, 'Unknown API route.')));
 
-  app.use(express.static(path.join(ROOT, 'public'), { index: 'index.html', maxAge: config.prod ? '1h' : 0 }));
-  app.get(/^\/(?!api\/).*/, (_req, res) => res.sendFile(path.join(ROOT, 'public', 'index.html')));
+  // Serve frontend static files from the sibling frontend directory (if it exists)
+  const frontendDir = config.frontendDir;
+  if (fs.existsSync(frontendDir)) {
+    app.use(express.static(frontendDir, { index: 'index.html', maxAge: config.prod ? '1h' : 0 }));
+    app.get(/^\/(?!api\/).*/, (_req, res) => res.sendFile(path.join(frontendDir, 'index.html')));
+  }
 
   // eslint-disable-next-line no-unused-vars
   app.use((err, req, res, _next) => {
@@ -52,5 +70,6 @@ if (process.argv[1] && path.resolve(process.argv[1]) === path.join(ROOT, 'server
   createApp().listen(config.port, config.host, () => {
     console.log(`CipherArena listening on ${config.baseUrl}`);
     console.log(`Instances: ${config.instanceProvider}. Data: ${config.dataDir}`);
+    console.log(`Frontend: ${fs.existsSync(config.frontendDir) ? config.frontendDir : 'not found (API-only mode)'}`);
   });
 }

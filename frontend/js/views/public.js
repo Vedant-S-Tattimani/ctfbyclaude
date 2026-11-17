@@ -1,6 +1,6 @@
 // Public pages: home, directory, event page + registration, practice, leaderboard, orgs, profiles, certificate verification.
 import { api, route, state, go, refresh, onAct, onForm, onChange } from '../core.js';
-import { esc, fmt, icon, tag, phaseTag, dateFmt, dtFmt, ago, dur, md, av, avColor, catCode, catName, diff, dialog, toast, hbars, CAT } from '../ui.js';
+import { esc, fmt, icon, tag, phaseTag, dateFmt, dtFmt, ago, dur, md, av, avColor, catCode, catName, diff, dialog, toast, hbars, CAT, STAR, UNDERLINE } from '../ui.js';
 
 const DIFFW = { beginner: 'Beginner-friendly', intermediate: 'Intermediate', advanced: 'Advanced' };
 const regLabel = (e) => e.myRegistration ? (e.myRegistration.status === 'pending' ? tag('Awaiting approval', 'warn') : tag('Registered', 'ok'))
@@ -11,6 +11,35 @@ function when(e) {
   if (e.phase === 'upcoming') return `Starts in ${dur(e.startsAt - Date.now())}`;
   return `Ended ${dateFmt(e.endsAt)}`;
 }
+
+const PJ_COLORS = ['c-blue', 'c-coral', 'c-berry', 'c-yellow', 'c-green', 'c-cyan'];
+export function pjCard(e, i = 0) {
+  const colorClass = PJ_COLORS[i % PJ_COLORS.length];
+  return `<a class="pj-card" href="#/events/${esc(e.slug)}">
+    <div class="pj-header ${colorClass}">
+      <div class="stack tight">
+        <span class="pj-tag">CTF // 0${(i + 1)}</span>
+        <span class="mono xs" style="opacity:0.9">${dateFmt(e.startsAt)}</span>
+      </div>
+      <div class="pj-arrow-btn" aria-hidden="true">${icon('arrowNE', 20)}</div>
+    </div>
+    <div class="pj-body">
+      <div class="row wrap" style="gap:6px;margin-bottom:10px">
+        ${phaseTag(e.phase, e.isPractice)}
+        <span class="tag plain">${e.participation === 'team' ? `Teams ${e.teamMin}–${e.teamMax}` : 'Solo'}</span>
+        <span class="tag plain">${DIFFW[e.difficulty]}</span>
+      </div>
+      <h3 class="pj-title">${esc(e.name)}</h3>
+      <p class="pj-desc">${esc(e.tagline || e.org?.name || 'Cybersecurity capture the flag competition.')}</p>
+      <div class="pj-meta">
+        <span class="mono xs dim">${fmt(e.teams)} ${e.participation === 'team' ? 'teams' : 'players'}</span>
+        <span class="mono xs ok" style="font-weight:600">${regLabel(e)}</span>
+      </div>
+    </div>
+    <div class="pj-star-watermark" aria-hidden="true">${STAR}</div>
+  </a>`;
+}
+
 export function evRow(e) {
   return `<a class="evrow" href="#/events/${esc(e.slug)}"><span class="acc" style="background:${esc(e.org?.accent || '#3d3337')}"></span>
     <div style="min-width:0"><div class="row" style="gap:10px">${phaseTag(e.phase, e.isPractice)}${e.visibility !== 'public' ? tag(e.visibility === 'invite' ? 'Invite only' : 'Private') : ''}</div>
@@ -27,25 +56,37 @@ route('/', { title: 'Compete. Exploit. Learn. Conquer.', view: async () => {
   const live = events.find((e) => e.phase === 'live');
   const sb = live ? await api(`/events/${live.slug}/scoreboard`) : null;
   return `<section class="hero"><div class="pitch">
-      <div class="label" style="margin-bottom:22px">${meta.stats.live ? `<span class="tag live">${meta.stats.live} live now</span>` : 'Capture the Flag platform'}</div>
-      <h1>The arena is open.<br><em>Are you ready?</em></h1>
-      <p class="lede">Find cybersecurity competitions, register solo or with your team, and solve challenges on a scoreboard that updates as flags land.</p>
-      <div class="row wrap" style="gap:10px;margin-top:28px"><a class="btn primary lg" href="#/events">Browse competitions</a><a class="btn lg" href="#/manage/new">Host an event</a></div>
-      <dl class="cells c4" style="margin-top:44px">${[['Players', meta.stats.users], ['Competitions', meta.stats.events], ['Live now', meta.stats.live], ['Flags captured', meta.stats.solves]].map(([k, v]) => `<div class="cell"><dt class="label">${k}</dt><dd class="mono" style="font-size:22px;margin-top:6px">${fmt(v)}</dd></div>`).join('')}</dl>
+      <div class="row wrap" style="margin-bottom:24px;gap:12px;align-items:center">
+        <div class="studio-badge"><span class="badge-dot" style="position:static;display:inline-block"></span> CIPHERARENA · STUDIO 2026</div>
+        ${meta.stats.live ? `<span class="tag live">${meta.stats.live} live now</span>` : ''}
+        <span class="hand-note">✦ 10 categories · real-time board</span>
+      </div>
+      <div>
+        <h1 style="font-size:clamp(44px,6vw,84px);line-height:0.92;margin-bottom:12px">THE ARENA<br><span style="color:var(--cyan)">IS OPEN.</span></h1>
+        ${UNDERLINE}
+      </div>
+      <p class="lede" style="margin-top:18px">Compete solo or with your team in high-stakes capture the flag events. Dynamic scoring, isolated container instances, and live real-time scoreboards engineered with studio precision.</p>
+      <div class="row wrap" style="gap:14px;margin-top:32px">
+        <a class="btn primary lg" href="#/events" style="box-shadow:3px 3px 0 var(--ink)">Browse competitions ${icon('arrowNE', 16)}</a>
+        <a class="btn lg" href="#/manage/new">Host an event</a>
+      </div>
+      <dl class="cells c4" style="margin-top:48px">${[['Players', meta.stats.users], ['Competitions', meta.stats.events], ['Live now', meta.stats.live], ['Flags captured', meta.stats.solves]].map(([k, v]) => `<div class="cell"><dt class="label">${k}</dt><dd class="mono" style="font-size:26px;font-weight:700;margin-top:6px;color:var(--ink)">${fmt(v)}</dd></div>`).join('')}</dl>
     </div>
     <div class="board-preview">${live ? `<div class="cell-h"><div><div class="label">Live scoreboard</div><h3 style="margin-top:4px">${esc(live.name)}</h3></div><span class="mono small dim">${when(live)}</span></div>
-      <table class="t"><tbody>${sb.rows.slice(0, 8).map((r) => `<tr><td class="mono" style="width:44px;color:${r.rank <= 3 ? 'var(--text)' : 'var(--faint)'}">${String(r.rank).padStart(2, '0')}</td><td>${esc(r.name)}</td><td class="mono dim small">${esc(r.country || '')}</td><td class="num">${fmt(r.points)}</td></tr>`).join('')}</tbody></table>
-      <div class="cell-h" style="border-top:1px solid var(--rule);border-bottom:0;margin-top:auto"><span class="xs faint mono">${sb.rows.length} teams on the board</span><a class="small sig" href="#/events/${esc(live.slug)}">Event page →</a></div>`
+      <table class="t"><tbody>${sb.rows.slice(0, 8).map((r) => `<tr><td class="mono" style="width:44px;font-weight:700;color:${r.rank <= 3 ? 'var(--cyan)' : 'var(--text-faint)'}">#${String(r.rank).padStart(2, '0')}</td><td style="font-weight:600">${esc(r.name)}</td><td class="mono dim small">${esc(r.country || '')}</td><td class="num" style="color:var(--ink)">${fmt(r.points)}</td></tr>`).join('')}</tbody></table>
+      <div class="cell-h" style="border-top:1px solid var(--rule);margin-top:auto"><span class="xs faint mono">${sb.rows.length} teams on the board</span><a class="btn sm" href="#/events/${esc(live.slug)}">Event page →</a></div>`
       : '<div class="empty"><b>No competition is live right now.</b>Upcoming events are listed below.</div>'}</div></section>
-  <section class="section"><div class="section-h"><h2>Competitions</h2><a class="small sig" href="#/events">All competitions →</a></div>${events.slice(0, 6).map(evRow).join('') || '<div class="empty">No published competitions yet.</div>'}</section>
-  <section class="section"><div class="section-h"><h2>Ten categories</h2><span class="small dim">Visible challenges across published events</span></div>
-    <div class="cells c5" style="border-left:0">${Object.entries(CAT).map(([id, [code, name]]) => `<div class="cell"><div class="row between"><span class="label">${code}</span><span class="mono dim small">${meta.byCategory[id] || 0}</span></div><div style="margin-top:14px;font-weight:600">${name}</div></div>`).join('')}</div></section>
+  <section class="section"><div class="section-h"><div><h2>Featured Arenas</h2><p class="small dim" style="margin-top:4px">Curated competitions built with isolated instances & dynamic scoring</p></div><span class="hand-note">← click to enter</span></div>
+    <div class="pj-grid">${events.slice(0, 3).map(pjCard).join('')}</div></section>
+  <section class="section"><div class="section-h"><h2>All Competitions</h2><a class="btn sm" href="#/events">Directory view →</a></div>${events.slice(0, 6).map(evRow).join('') || '<div class="empty">No published competitions yet.</div>'}</section>
+  <section class="section"><div class="section-h"><div><h2>Ten categories</h2><p class="small dim" style="margin-top:4px">Visible challenges across published events</p></div><span class="hand-note">Jeopardy style</span></div>
+    <div class="cells c5" style="border-left:0">${Object.entries(CAT).map(([id, [code, name]]) => `<div class="cell"><div class="row between"><span class="tag plain" style="font-weight:700">${code}</span><span class="mono dim small">${meta.byCategory[id] || 0}</span></div><div style="margin-top:14px;font-weight:700;font-size:15px">${name}</div></div>`).join('')}</div></section>
   <section class="section"><div class="cells c2" style="border-left:0;border-top:0">
-    <div class="cell" style="padding:32px 40px"><div class="label">For players</div><h2 style="margin:10px 0 14px">One workspace from registration to certificate</h2><ul class="stack tight dim" style="list-style:none">
-      <li>— Board grouped by category, solved and locked states at a glance</li><li>— Per-team instances with countdowns and extensions</li><li>— Hints with their cost shown before you unlock</li><li>— Practice arena that never touches official rankings</li><li>— Certificates with a public verification ID</li></ul></div>
-    <div class="cell" style="padding:32px 40px"><div class="label">For organizers</div><h2 style="margin:10px 0 14px">Run the event without building infrastructure</h2><ul class="stack tight dim" style="list-style:none">
-      <li>— Six-step setup with draft, checklist and publish</li><li>— Static, regex and per-team dynamic flags</li><li>— Dynamic scoring, first-blood bonus, hint penalties, score freeze</li><li>— Integrity signals reviewed by people, never auto-banned</li><li>— CSV exports and certificate issuing</li></ul>
-      <a class="btn primary" style="margin-top:20px" href="#/manage/new">Create an event</a></div></div></section>`;
+    <div class="cell" style="padding:40px"><div class="label">For players</div><h2 style="margin:12px 0 16px;font-size:24px">One workspace from registration to certificate</h2><ul class="stack tight dim" style="list-style:none">
+      <li>✦ Board grouped by category, solved and locked states at a glance</li><li>✦ Per-team instances with countdowns and extensions</li><li>✦ Hints with their cost shown before you unlock</li><li>✦ Practice arena that never touches official rankings</li><li>✦ Certificates with a public verification ID</li></ul></div>
+    <div class="cell" style="padding:40px"><div class="label">For organizers</div><h2 style="margin:12px 0 16px;font-size:24px">Run the event without building infrastructure</h2><ul class="stack tight dim" style="list-style:none">
+      <li>✦ Six-step setup with draft, checklist and publish</li><li>✦ Static, regex and per-team dynamic flags</li><li>✦ Dynamic scoring, first-blood bonus, hint penalties, score freeze</li><li>✦ Integrity signals reviewed by people, never auto-banned</li><li>✦ CSV exports and certificate issuing</li></ul>
+      <a class="btn primary" style="margin-top:24px" href="#/manage/new">Create an event</a></div></div></section>`;
 } });
 
 /* ---------- directory ---------- */

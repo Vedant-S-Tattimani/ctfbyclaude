@@ -1,11 +1,13 @@
 FROM node:22-bookworm-slim
 WORKDIR /app
-COPY package*.json ./
-RUN npm ci --omit=dev
-COPY . .
-ENV NODE_ENV=production DATA_DIR=/data PORT=3000
+COPY backend/package*.json ./backend/
+RUN cd backend && npm ci --omit=dev
+COPY backend/ ./backend/
+COPY frontend/ ./frontend/
+ENV NODE_ENV=production DATA_DIR=/data PORT=3000 FRONTEND_DIR=/app/frontend
 RUN mkdir -p /data && chown node:node /data
 VOLUME ["/data"]
 EXPOSE 3000
 USER node
-CMD ["node", "--disable-warning=ExperimentalWarning", "server/index.js"]
+CMD ["node", "--disable-warning=ExperimentalWarning", "backend/server/index.js"]
+

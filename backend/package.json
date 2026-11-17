@@ -1,0 +1,25 @@
+{
+  "name": "cipherarena-backend",
+  "version": "1.0.0",
+  "description": "CipherArena — CTF hosting, management and competition platform (backend API)",
+  "private": true,
+  "type": "module",
+  "main": "server/index.js",
+  "engines": {
+    "node": ">=22.13"
+  },
+  "scripts": {
+    "start": "node --disable-warning=ExperimentalWarning server/index.js",
+    "dev": "node --disable-warning=ExperimentalWarning --watch server/index.js",
+    "seed": "node --disable-warning=ExperimentalWarning scripts/seed.js",
+    "reset": "node --disable-warning=ExperimentalWarning scripts/seed.js --reset",
+    "test": "node --disable-warning=ExperimentalWarning --test test/*.test.js"
+  },
+  "dependencies": {
+    "bcryptjs": "^3.0.3",
+    "cors": "^2.8.5",
+    "express": "^5.3.0",
+    "multer": "^2.5.0"
+  }
+}
+

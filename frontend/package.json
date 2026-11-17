@@ -1,0 +1,11 @@
+{
+  "name": "cipherarena-frontend",
+  "version": "1.0.0",
+  "description": "CipherArena — CTF platform frontend (vanilla JS SPA)",
+  "private": true,
+  "scripts": {
+    "dev": "npx serve -l 5500 -s --cors",
+    "start": "npx serve -l 5500 -s"
+  }
+}
+
