@@ -4,6 +4,11 @@ export const attr = esc;
 export const fmt = (n) => (n == null ? '—' : Number(n).toLocaleString('en-US'));
 
 const P = {
+  arrowNE: '<path d="M7 17 17 7M8 7h9v9"/>', grid: '<rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/>',
+  sparkle: '<path d="M12 2v6M12 16v6M2 12h6M16 12h6M5 5l3.5 3.5M15.5 15.5 19 19M5 19l3.5-3.5M15.5 8.5 19 5"/>', trophy: '<path d="M8 4h8v5a4 4 0 0 1-8 0zM8 6H4v1a4 4 0 0 0 4 4M16 6h4v1a4 4 0 0 1-4 4M12 13v4M8 21h8M9 17h6v4H9z"/>',
+  target: '<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1"/>', home: '<path d="M3 11 12 3l9 8v10h-6v-6H9v6H3z"/>',
+  users: '<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0M16 4.5a3.5 3.5 0 0 1 0 7M21.5 20a6.5 6.5 0 0 0-4-6"/>', heart: '<path d="M12 20s-8-5.2-8-11a4.5 4.5 0 0 1 8-2.8A4.5 4.5 0 0 1 20 9c0 5.8-8 11-8 11z" fill="currentColor"/>',
+  book: '<path d="M4 4h6a2 2 0 0 1 2 2v14a2 2 0 0 0-2-2H4zM20 4h-6a2 2 0 0 0-2 2v14a2 2 0 0 1 2-2h6z"/>', building: '<path d="M4 21V3h11v18M15 9h5v12M8 7h3M8 11h3M8 15h3M2 21h20"/>',
   flag: '<path d="M5 21V4h12l-2.5 4L17 12H5"/>', check: '<path d="m5 12 5 5L20 7"/>', x: '<path d="M6 6l12 12M18 6 6 18"/>',
   lock: '<rect x="5" y="11" width="14" height="10"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/>', server: '<rect x="3" y="4" width="18" height="7"/><rect x="3" y="13" width="18" height="7"/><path d="M7 7.5h.01M7 16.5h.01"/>',
   file: '<path d="M14 3H6v18h12V7zM14 3v4h4"/>', download: '<path d="M12 3v12M7 10l5 5 5-5M4 21h16"/>', bell: '<path d="M6 8a6 6 0 1 1 12 0c0 7 3 8 3 8H3s3-1 3-8M10 20a2 2 0 0 0 4 0"/>',
@@ -16,39 +21,29 @@ const P = {
   trash: '<path d="M4 7h16M10 11v6M14 11v6M6 7l1 14h10l1-14M9 7V4h6v3"/>', edit: '<path d="M4 20h4L19 9l-4-4L4 16z"/>', logout: '<path d="M15 4h4v16h-4M10 8l-4 4 4 4M6 12h11"/>', upload: '<path d="M12 21V9M7 14l5-5 5 5M4 3h16"/>',
 };
 export const icon = (n, s = 15, cls = '') => `<svg class="${cls}" width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="square" stroke-linejoin="miter" aria-hidden="true">${P[n] || ''}</svg>`;
-export const MARK = '<svg class="mark" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="8" fill="#111212"/><path d="M16 6 L26 24 L6 24 Z" fill="none" stroke="#36C5F0" stroke-width="2.5" stroke-linejoin="round"/><circle cx="16" cy="18" r="2.5" fill="#FFFFFF"/></svg>';
+export const MARK = '<svg class="mark" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="7" fill="#111212"/><path d="M16 6 26 25H6z" fill="none" stroke="#36c5f0" stroke-width="3" stroke-linejoin="round"/><circle cx="16" cy="18" r="2.6" fill="#ecb22e"/></svg>';
 
 export const STAR = '<svg class="nudge-star" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 0L14.6 9.4L24 12L14.6 14.6L12 24L9.4 14.6L0 12L9.4 9.4L12 0Z"/></svg>';
 export const UNDERLINE = '<svg class="nudge-underline" viewBox="0 0 260 20" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M2.5 14.5C65.5 3.5 178 -3.5 257.5 14" stroke="#36C5F0" stroke-width="4" stroke-linecap="round"/></svg>';
 
-export function rulerHtml() {
+export function rulerHtml(bottom = false) {
   let ticks = '';
-  for (let px = 0; px <= 2600; px += 50) {
-    const isMajor = px % 100 === 0;
-    ticks += `<div class="ruler-tick ${isMajor ? 'major' : 'minor'}"><span class="ruler-num">${isMajor ? px : ''}</span></div>`;
-  }
-  return `<div class="ruler" id="ruler" aria-hidden="true">
-    <div class="ruler-track">${ticks}</div>
-    <div class="ruler-meta">
-      <div class="ruler-status"><span class="ruler-dot"></span><span class="ruler-status-text">CIPHERARENA · ONLINE</span></div>
-      <div class="ruler-time" id="ruler-clock">00:00:00</div>
-    </div>
-  </div>`;
+  for (let px = 0; px <= 3000; px += 50) ticks += `<div class="ruler-tick ${px % 100 === 0 ? 'major' : 'minor'}"><span class="ruler-num">${px % 100 === 0 ? px : ''}</span></div>`;
+  return `<div class="ruler ${bottom ? 'bottom' : ''}" ${bottom ? '' : 'id="ruler"'} aria-hidden="true"><div class="ruler-track">${ticks}${bottom ? '' : '<div class="ruler-mark" id="ruler-mark" style="opacity:0"><span>0</span></div>'}</div>
+    ${bottom ? '' : '<div class="ruler-meta"><span class="ruler-dot"></span><span class="ruler-status-text">CIPHERARENA · ONLINE</span><span class="ruler-time" data-clock>--:--:--</span></div>'}</div>`;
 }
+export function startRulerClock() { /* clocks are driven by fx.js ([data-clock]) */ }
 
-let clockStarted = false;
-export function startRulerClock() {
-  if (clockStarted) return;
-  clockStarted = true;
-  function tick() {
-    const el = document.getElementById('ruler-clock');
-    if (!el) return;
-    const now = new Date();
-    el.textContent = now.toLocaleTimeString('en-US', { hour12: true, hour: '2-digit', minute: '2-digit', second: '2-digit' }) + ' LOCAL';
-  }
-  setInterval(tick, 1000);
-  setTimeout(tick, 50);
-}
+/* Decorative inline shapes (original artwork) used inside headlines */
+export const SHAPE = {
+  target: '<svg class="inline-ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="11" fill="#2fbc81"/><circle cx="12" cy="12" r="7.5" fill="#fff"/><circle cx="12" cy="12" r="4.5" fill="#2fbc81"/><circle cx="12" cy="12" r="1.8" fill="#fff"/></svg>',
+  flower: '<svg class="inline-ico" viewBox="0 0 24 24" aria-hidden="true"><g fill="#e01e5a"><circle cx="12" cy="5" r="4.2"/><circle cx="12" cy="19" r="4.2"/><circle cx="5" cy="12" r="4.2"/><circle cx="19" cy="12" r="4.2"/><circle cx="7" cy="7" r="3.6"/><circle cx="17" cy="17" r="3.6"/><circle cx="7" cy="17" r="3.6"/><circle cx="17" cy="7" r="3.6"/></g><circle cx="12" cy="12" r="3.4" fill="#fff"/></svg>',
+  cross: '<svg class="inline-ico nospin" viewBox="0 0 24 24" aria-hidden="true"><path fill="#ecb22e" d="M8 1h8v6.5L22.5 1 23 9l-6.5 3 6.5 3-.5 8-6.5-6.5V23H8v-6.5L1.5 23 1 15l6.5-3L1 9l.5-8L8 7.5z"/></svg>',
+  bowtie: '<svg class="inline-ico nospin" viewBox="0 0 24 24" aria-hidden="true"><path fill="#e01e5a" d="M2 3h20l-6 9 6 9H2l6-9z"/></svg>',
+  diamond: '<svg class="inline-ico" viewBox="0 0 24 24" aria-hidden="true"><path fill="#36c5f0" d="M12 1 23 12 12 23 1 12z"/><path fill="#111212" d="M12 7 17 12 12 17 7 12z"/></svg>',
+};
+export const SCRIBBLE = '<svg viewBox="0 0 220 14" preserveAspectRatio="none" aria-hidden="true"><path d="M3 9c40-6 92-8 150-4 22 2 42 4 64-1M10 12c50-3 110-4 170-1" fill="none" stroke="#111212" stroke-width="2" stroke-linecap="round"/></svg>';
+export const CURSOR = (color) => `<svg width="18" height="20" viewBox="0 0 18 20" aria-hidden="true"><path d="M1 1l15 7.2-6.6 1.8L6 18z" fill="${color}" stroke="#fff" stroke-width="1.5" stroke-linejoin="round"/></svg>`;
 
 export function dockHtml(currentPath, me) {
   const p = currentPath || '';

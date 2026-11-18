@@ -95,3 +95,12 @@ test/api.test.js    end-to-end API tests
 ## Not included
 
 Payments (events can show a fee note; collecting it is up to you), an SMTP sender, OAuth providers, attack-defense format, and a writeup editor. The seed data is fictional.
+
+## Frontend design system ("studio canvas")
+
+Inspired by the Nudge portfolio look: a white design-tool canvas with a pixel ruler and 100px grid, Figma-style selection frames, multiplayer cursors, rotated sticker notes, handwritten annotations, blocky display type and flat colour blocks.
+
+- **Tokens** live at the top of `frontend/css/app.css`: ink `#111212`, cyan `#36c5f0`, yellow `#ecb22e`, berry `#e01e5a`, green `#2fbc81`. Fonts are self-hosted in `frontend/fonts` (Flux, Inter Display, DM Mono, Geist Mono, Just Me Again Down Here), so the strict CSP needs no third-party hosts.
+- **Effects** are in `frontend/js/fx.js` and run after every render: a "YOU" cursor that follows the pointer, a ruler marker that tracks the cursor's x position, scroll reveals, count-up numbers, live clocks, magnetic buttons, mouse parallax on stickers, and a confetti burst (correct flags, publishing an event). All of it switches off with `prefers-reduced-motion`, and the cursor is hidden on touch devices.
+- **Home page** (`views/public.js`): hero with an animated wordmark in a selection frame, drifting category cursors and top-team bubbles, a tilted category marquee, a "how it works" statement with inline shapes and category blocks, stats stickers, sticky stacked folder-tab event cards (live mini-scoreboard or countdown), notes for players and organizers, and a swirl call-to-action card.
+- `frontend/js/config.js` holds `window.__CA_CONFIG__` (it used to be an inline script, which the CSP blocked).

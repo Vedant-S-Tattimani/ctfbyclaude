@@ -1,5 +1,6 @@
 // Core: API client, session state, router, shells, event delegation, realtime.
 import { esc, icon, MARK, toast, av, ago, rulerHtml, dockHtml, startRulerClock } from './ui.js';
+import { enhance } from './fx.js';
 
 /* ---------- API ---------- */
 // API_BASE is configured via window.__CA_CONFIG__.apiBase (set in index.html or by the dev server).
@@ -40,6 +41,7 @@ export async function render({ keepScroll = false } = {}) {
   document.getElementById('root').innerHTML = shellFor(c, html);
   document.title = `${title || c.r.title || 'CipherArena'}${title || c.r.title ? ' · CipherArena' : ''}`;
   mount?.(document.getElementById('root'));
+  enhance();
   startRulerClock();
   if (keepScroll) scrollTo(0, y);
   connectStream(c);
@@ -85,14 +87,16 @@ export function closePops() { document.querySelectorAll('.pop').forEach((p) => p
 /* ---------- shells ---------- */
 function topbar(c, { menu = false } = {}) {
   const me = state.me; const p = c.path;
-  const nav = [['/events', 'Competitions'], ['/practice', 'Practice'], ['/leaderboard', 'Leaderboard'], ['/orgs', 'Organizations']];
+  const nav = [['/', 'Home', 'home'], ['/events', 'Competitions', 'grid'], ['/practice', 'Practice', 'book'], ['/leaderboard', 'Leaderboard', 'trophy'], ['/orgs', 'Organizations', 'building']];
+  const isOn = (h) => (h === '/' ? p === '/' : p.startsWith(h));
   return `<header class="topbar">${menu ? `<button class="iconbtn menu-btn" data-act="side" aria-label="Open navigation">${icon('menu', 18)}</button>` : ''}
-    <a class="brand" href="#/">${MARK}<span class="word">Cipher<b>Arena</b></span></a>
-    <nav class="topnav" aria-label="Main">${nav.map(([h, l]) => `<a href="#${h}" class="${p.startsWith(h) ? 'on' : ''}">${l}</a>`).join('')}</nav><span class="spacer"></span>
-    <div class="tools">${me ? `<a class="btn sm hide-m" href="#/dashboard">Dashboard</a>
+    <a class="brand" href="#/" aria-label="CipherArena home">${MARK}<span class="word">Cipher<b>Arena</b></span></a>
+    <nav class="topnav" aria-label="Main">${nav.map(([h, l, i]) => `<a href="#${h}" class="${isOn(h) ? 'on' : ''}">${icon(i, 14)}${l}</a>`).join('')}</nav><span class="spacer"></span>
+    <div class="tools">${me ? `${me.role !== 'participant' ? '<a class="chip-round hide-m" href="#/manage" title="Organizer workspace">OR</a>' : ''}${me.role === 'admin' ? '<a class="chip-round hide-m" href="#/admin" title="Platform admin">AD</a>' : ''}
       <div style="position:relative;display:flex"><button class="iconbtn" data-act="notifs" data-pop aria-label="Notifications">${icon('bell', 17)}${state.unread ? `<span class="badge-dot">${state.unread > 9 ? '9+' : state.unread}</span>` : ''}</button></div>
-      <div style="position:relative;display:flex"><button class="iconbtn" data-act="usermenu" data-pop aria-label="Account menu" style="padding:0 8px">${av(me.username)}</button></div>`
-      : `<a class="btn ghost sm" href="#/login">Sign in</a><a class="btn primary sm" href="#/signup">Create account</a>`}</div></header>`;
+      <div style="position:relative;display:flex"><button class="iconbtn" data-act="usermenu" data-pop aria-label="Account menu" style="padding:0 2px">${av(me.username)}</button></div>
+      <a class="btn sm hide-m" href="#/dashboard">${icon('heart', 13)}Dashboard</a>`
+      : `<a class="btn ghost sm" href="#/login">Sign in</a><a class="btn sm" href="#/signup">${icon('heart', 13)}Create account</a>`}</div></header>`;
 }
 function sideLink(href, label, cur, n, alert) { return `<a class="nav ${cur ? 'on' : ''}" href="#${href}">${esc(label)}${n != null ? `<span class="n ${alert ? 'alert' : ''}">${n}</span>` : ''}</a>`; }
 export const sideExtra = { manage: null, arena: null };
@@ -113,14 +117,15 @@ function arenaSide(c) {
     <div class="grp label">You</div>${sideLink('/dashboard', 'Dashboard', false)}${sideLink('/teams', 'Teams', false)}
     ${a?.team ? `<div class="foot"><div class="label">${esc(a.team.name || 'Solo')}</div><div class="row between" style="margin-top:8px"><span class="dim small">Rank</span><span class="mono">#${a.team.rank} / ${a.team.of}</span></div><div class="row between"><span class="dim small">Points</span><span class="mono">${a.team.points}</span></div><div class="row between"><span class="dim small">Solved</span><span class="mono">${a.team.solved}</span></div></div>` : ''}`;
 }
-function footer() { return `<footer class="footer"><span>Cipher<b>Arena</b> · Design-Crafted CTF Platform</span><span class="row" style="gap:18px"><a href="#/verify">Verify certificate</a><a href="#/orgs">Organizations</a><a href="#/events">Competitions</a></span></footer>`; }
+function footer() { return `<footer class="footer"><span>Cipher<b>Arena</b> · capture the flag platform · <span data-clock></span></span><span class="row" style="gap:18px"><a href="#/verify">Verify certificate</a><a href="#/orgs">Organizations</a><a href="#/events">Competitions</a><a href="#/manage/new">Host an event</a></span></footer>${rulerHtml(true)}`; }
+const floatCta = (me) => `<a class="float-cta" href="#/${me && me.role !== 'participant' ? 'manage/new' : 'events'}">${icon('heart', 14)}${me && me.role !== 'participant' ? 'Host an event' : 'Find a CTF'}</a>`;
 function shellFor(c, html) {
   const sh = c.r.shell || 'public';
   if (sh === 'bare') return html;
   const r = rulerHtml();
   const d = dockHtml(c.path, state.me);
   if (sh === 'auth') return r + topbar(c) + html + d;
-  if (sh === 'public') return r + topbar(c) + `<main id="main">${html}</main>` + footer() + d;
+  if (sh === 'public') return r + topbar(c) + `<main id="main">${html}</main>` + footer() + floatCta(state.me) + d;
   const side = sh === 'arena' ? arenaSide(c) : appSide(c);
   return r + topbar(c, { menu: true }) + `<div class="app"><aside class="side" aria-label="Section navigation">${side}</aside><main class="main" id="main">${html}</main></div>` + d;
 }

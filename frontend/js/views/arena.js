@@ -1,8 +1,10 @@
 // Competition workspace: board, challenge, instances, submissions, scoreboard, projector, announcements.
 import { api, route, state, go, refresh, ctx, onAct, onForm, onChange, sideExtra, streamHandlers } from '../core.js';
+import { confetti } from '../fx.js';
 import { esc, fmt, icon, tag, phaseTag, dtFmt, timeFmt, ago, clock, md, av, catCode, catName, diff, DIFF, toast, confirmDlg, copy, multiLine, CAT } from '../ui.js';
 
 const A = { shell: 'arena', auth: true };
+const CC = { web: 'cyan', crypto: 'yellow', rev: 'berry', pwn: 'ink', forensics: 'green', osint: 'cyan', misc: 'yellow', hardware: 'berry', stego: 'green', network: 'ink' };
 let BOARD = null; const BF = { cat: '', state: '', q: '' };
 
 function statusline(slug, b) {
@@ -21,7 +23,7 @@ async function loadBoard(slug) {
 }
 function tile(c, slug) {
   const lockText = c.lockReason?.reason === 'scheduled' ? `Releases ${dtFmt(c.lockReason.at)}` : c.lockReason?.reason === 'locked' ? `Solve ${c.lockReason.after} first` : c.hidden ? 'Hidden from players' : '';
-  return `<a class="tile ${c.solved ? 'solved' : ''} ${!c.available && !c.hidden ? 'locked' : ''} ${c.hidden ? 'hiddenc' : ''}" href="${c.available || c.hidden ? `#/arena/${esc(slug)}/c/${c.id}` : '#'}" ${!c.available && !c.hidden ? `data-act="locked" data-msg="${esc(lockText)}"` : ''} aria-label="${esc(c.name)}, ${c.value} points, ${c.solved ? 'solved' : c.available ? 'open' : 'locked'}">
+  return `<a style="--cc:var(--${CC[c.category] || 'cyan'})" class="tile ${c.solved ? 'solved' : ''} ${!c.available && !c.hidden ? 'locked' : ''} ${c.hidden ? 'hiddenc' : ''}" href="${c.available || c.hidden ? `#/arena/${esc(slug)}/c/${c.id}` : '#'}" ${!c.available && !c.hidden ? `data-act="locked" data-msg="${esc(lockText)}"` : ''} aria-label="${esc(c.name)}, ${c.value} points, ${c.solved ? 'solved' : c.available ? 'open' : 'locked'}">
     <span class="corner">${c.solved ? icon('check', 14) : !c.available ? icon('lock', 13) : c.kind === 'instance' ? icon('server', 13) : icon('file', 13)}</span>
     <div class="pts">${c.value}</div><div class="nm">${esc(c.name)}</div>
     <div class="meta"><span>${diff(c.difficulty)} ${c.solves} solve${c.solves === 1 ? '' : 's'}</span>${c.firstBloodMine ? '<span class="fb">FIRST BLOOD</span>' : !c.available ? `<span>${esc(lockText.split(' ')[0])}</span>` : ''}</div></a>`;
@@ -31,7 +33,7 @@ function boardHtml(slug) {
   const list = BOARD.challenges.filter((c) => (!BF.cat || c.category === BF.cat) && (!BF.state || (BF.state === 'solved' ? c.solved : !c.solved)) && (!q || c.name.toLowerCase().includes(q)));
   if (!list.length) return '<div class="panel"><div class="empty"><b>No challenges match.</b>Clear the filters to see the full board.</div></div>';
   const cats = [...new Set(list.map((c) => c.category))];
-  return `<div class="board">${cats.map((cat) => { const cl = list.filter((c) => c.category === cat); return `<div class="col"><div class="col-h"><b>${esc(catName(cat))}</b><span class="mono xs faint">${cl.filter((c) => c.solved).length}/${cl.length}</span></div>${cl.map((c) => tile(c, slug)).join('')}</div>`; }).join('')}</div>`;
+  return `<div class="board">${cats.map((cat) => { const cl = list.filter((c) => c.category === cat); return `<div class="col"><div class="col-h k-${CC[cat] || 'cyan'}"><b>${esc(catName(cat))}</b><span class="mono xs faint">${cl.filter((c) => c.solved).length}/${cl.length}</span></div>${cl.map((c) => tile(c, slug)).join('')}</div>`; }).join('')}</div>`;
 }
 route('/arena/:slug', { ...A, title: 'Challenges', view: async ({ params }) => {
   const b = await loadBoard(params.slug); const cats = [...new Set(b.challenges.map((c) => c.category))];
@@ -95,7 +97,7 @@ onForm('submit', async (f, fm) => {
   const title = { correct: r.firstBlood ? 'Correct — first blood' : 'Correct', incorrect: 'Incorrect', already: 'Already solved', ratelimited: 'Slow down', unavailable: 'Not counted' }[r.result];
   const ic = { correct: 'check', incorrect: 'x', already: 'info', ratelimited: 'clock', unavailable: 'lock' }[r.result];
   box.innerHTML = `<div class="fbk ${r.result} ${r.result === 'incorrect' ? 'shake' : ''}">${icon(ic)}<div><b>${title}</b><div class="small">${esc(r.message)}${r.result === 'correct' ? ` Your team is now #${r.rank} with ${fmt(r.points)} points.` : ''}</div></div></div>`;
-  if (r.result === 'correct') { toast(`${CH.challenge.name} solved`); const keep = box.innerHTML; await refresh(); document.getElementById('fbk').innerHTML = keep; }
+  if (r.result === 'correct') { const rb = box.getBoundingClientRect(); confetti(rb.left + rb.width / 2, rb.top + 20); toast(`${CH.challenge.name} solved`); const keep = box.innerHTML; await refresh(); document.getElementById('fbk').innerHTML = keep; }
   else { input.select(); if (r.result === 'ratelimited') { const btn = fm.querySelector('button[type=submit]'); setTimeout(() => { btn.disabled = true; }, 0); setTimeout(() => { btn.disabled = false; }, (r.retryAfter || 30) * 1000); } }
 });
 onAct('hint', async (el) => {
@@ -110,7 +112,7 @@ onAct('inst-restart', async (el) => { if (!(await confirmDlg('Restart the instan
 
 /* ---------- scoreboard ---------- */
 let SB = null; let SBQ = ''; let prevRanks = {};
-const SERIES = ['#e02149', '#ece5e6', '#7d9ce0', '#dba141', '#45b67d'];
+const SERIES = ['#111212', '#36c5f0', '#e01e5a', '#ecb22e', '#2fbc81'];
 function sbRows(rows, big = false) {
   return rows.map((r) => { const prev = prevRanks[r.name]; const delta = prev ? prev - r.rank : 0;
     return `<tr class="${r.mine ? 'mine' : ''} ${delta ? 'flash' : ''}"><td class="mono" style="width:56px;${r.rank <= 3 ? 'color:var(--text);font-weight:600' : 'color:var(--faint)'}">${String(r.rank).padStart(2, '0')}</td>

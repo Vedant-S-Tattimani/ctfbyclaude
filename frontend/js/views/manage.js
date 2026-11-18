@@ -1,5 +1,6 @@
 // Organizer workspace.
 import { api, route, state, go, refresh, ctx, onAct, onForm, onChange, sideExtra, streamHandlers } from '../core.js';
+import { confetti } from '../fx.js';
 import { esc, fmt, icon, tag, phaseTag, dateFmt, dtFmt, timeFmt, ago, md, av, catCode, catName, diff, DIFF, CAT, toast, dialog, confirmDlg, copy, toLocalInput, fromLocalInput, hbars } from '../ui.js';
 
 const M = { shell: 'app', auth: true };
@@ -108,7 +109,7 @@ route('/manage/:slug', { ...M, view: async ({ params }) => {
       <div class="cell-h" style="border-top:1px solid var(--rule)"><h3>Results</h3></div><div class="cell stack tight">${['scoreboard.csv', 'solves.csv', 'submissions.csv'].map((k) => `<a class="btn sm" href="/api/manage/events/${esc(e.slug)}/export/${k}" download>${icon('download')}Export ${k}</a>`).join('')}
         <button class="btn sm primary" data-act="certs" ${e.phase !== 'ended' ? 'disabled title="Available after the event ends"' : ''}>Issue certificates</button>${e.phase !== 'ended' ? '<span class="xs faint">Certificates can be issued after the event ends.</span>' : ''}</div>` : ''}</div></div></div>` };
 } });
-onAct('publish', async () => { if (!(await confirmDlg('Publish this event?', 'It becomes visible according to its visibility setting, and registration opens on schedule.', 'Publish'))) return; await api(`/manage/events/${ctx.params.slug}/publish`, { method: 'POST' }); toast('Event published.'); refresh(); });
+onAct('publish', async () => { if (!(await confirmDlg('Publish this event?', 'It becomes visible according to its visibility setting, and registration opens on schedule.', 'Publish'))) return; await api(`/manage/events/${ctx.params.slug}/publish`, { method: 'POST' }); confetti(); toast('Event published.'); refresh(); });
 onAct('unpublish', async () => { if (!(await confirmDlg('Unpublish this event?', 'It will be hidden from players until you publish again. Registrations are kept.', 'Unpublish', true))) return; await api(`/manage/events/${ctx.params.slug}/unpublish`, { method: 'POST' }); toast('Event moved back to draft.'); refresh(); });
 onChange('accepting', async (el) => { await api(`/manage/events/${ctx.params.slug}`, { method: 'PATCH', body: { accepting: el.checked } }); toast(el.checked ? 'Submissions are open.' : 'Submissions paused. Attempts are not counted.', el.checked ? 'ok' : 'info'); });
 onAct('certs', async () => { if (!(await confirmDlg('Issue certificates?', 'Every member of a team with at least one solve gets one. Top three teams get achievement certificates. Re-running only adds missing ones.', 'Issue'))) return; const r = await api(`/manage/events/${ctx.params.slug}/certificates`, { method: 'POST' }); toast(`${r.issued} certificate${r.issued === 1 ? '' : 's'} issued.`); });

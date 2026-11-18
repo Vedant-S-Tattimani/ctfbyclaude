@@ -1,6 +1,6 @@
 // Public pages: home, directory, event page + registration, practice, leaderboard, orgs, profiles, certificate verification.
 import { api, route, state, go, refresh, onAct, onForm, onChange } from '../core.js';
-import { esc, fmt, icon, tag, phaseTag, dateFmt, dtFmt, ago, dur, md, av, avColor, catCode, catName, diff, dialog, toast, hbars, CAT, STAR, UNDERLINE } from '../ui.js';
+import { esc, fmt, icon, tag, phaseTag, dateFmt, dtFmt, ago, dur, md, av, avColor, catCode, catName, diff, dialog, toast, hbars, CAT, STAR, UNDERLINE, SHAPE, SCRIBBLE, CURSOR } from '../ui.js';
 
 const DIFFW = { beginner: 'Beginner-friendly', intermediate: 'Intermediate', advanced: 'Advanced' };
 const regLabel = (e) => e.myRegistration ? (e.myRegistration.status === 'pending' ? tag('Awaiting approval', 'warn') : tag('Registered', 'ok'))
@@ -51,42 +51,82 @@ export function evRow(e) {
 }
 
 /* ---------- home ---------- */
+const KCOL = ['k-cyan', 'k-ink', 'k-yellow', 'k-berry', 'k-green'];
+const CATCOL = { web: 'k-cyan', crypto: 'k-yellow', rev: 'k-berry', pwn: 'k-ink', forensics: 'k-green', osint: 'k-cyan', misc: 'k-yellow', hardware: 'k-berry', stego: 'k-green', network: 'k-ink' };
+const CATICO = { web: 'grid', crypto: 'lock', rev: 'sparkle', pwn: 'server', forensics: 'eye', osint: 'target', misc: 'heart', hardware: 'bulb', stego: 'file', network: 'refresh' };
+function countdownParts(ms) { const s = Math.max(0, Math.floor(ms / 1000)); const d = Math.floor(s / 86400), h = Math.floor((s % 86400) / 3600), m = Math.floor((s % 3600) / 60); return d ? `${d}D ${String(h).padStart(2, '0')}H` : `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`; }
+function folderCard(e, i, boards) {
+  const k = KCOL[i % KCOL.length]; const sb = boards[e.slug];
+  const fileName = e.phase === 'upcoming' ? 'countdown.txt' : e.phase === 'live' ? 'scoreboard.live' : 'results.csv';
+  const right = e.phase === 'upcoming'
+    ? `<div class="scr"><div class="label" style="text-align:center">Starts in</div><div class="count" data-countdown="${e.startsAt}">${countdownParts(e.startsAt - Date.now())}</div><div class="mono xs dim" style="text-align:center;margin-top:10px">${dtFmt(e.startsAt)} · ${e.regOpen ? 'registration open' : 'registration closed'}</div></div>`
+    : `<div class="scr"><table class="t"><tbody>${(sb?.rows || []).slice(0, 5).map((r) => `<tr><td class="mono" style="width:40px">${String(r.rank).padStart(2, '0')}</td><td>${esc(r.name)}</td><td class="num">${fmt(r.points)}</td></tr>`).join('') || '<tr><td><div class="empty xs">No solves yet</div></td></tr>'}</tbody></table></div>`;
+  return `<article class="fcard ${k}" style="--n:${i % 4};--i:${i}"><a class="ftab" href="#/events/${esc(e.slug)}">${icon('flag', 13)}Event ${String(i + 1).padStart(2, '0')}</a>
+    <div class="fbody"><div class="left"><span class="when">${e.isPractice ? 'Always open' : dateFmt(e.startsAt)}${e.phase === 'live' ? ' · live now' : ''}</span>
+      <h3>${esc(e.name)}</h3><p>${esc(e.tagline || e.org?.name || '')}</p>
+      <a class="viewlink" href="#/events/${esc(e.slug)}">View event ${icon('arrowNE', 13)}</a>
+      <div class="ftags"><span>${e.participation === 'team' ? `Teams ${e.teamMin}–${e.teamMax}` : 'Solo'}</span><span>${DIFFW[e.difficulty]}</span><span>${e.mode === 'onsite' ? 'On-site' : 'Online'}</span>${e.regMode !== 'open' ? `<span>${e.regMode === 'invite' ? 'Invite only' : 'Approval'}</span>` : ''}</div></div>
+      <a class="right sel-hover" href="#/${e.phase === 'upcoming' ? 'events' : 'arena'}/${esc(e.slug)}${e.phase === 'upcoming' ? '' : '/scoreboard'}"><span class="pattern"></span><span class="file-chip"><i></i>${fileName}</span>${right}</a></div></article>`;
+}
+setInterval(() => document.querySelectorAll('[data-countdown]').forEach((el) => { el.textContent = countdownParts(Number(el.dataset.countdown) - Date.now()); }), 1000);
+
 route('/', { title: 'Compete. Exploit. Learn. Conquer.', view: async () => {
   const [{ events }, meta] = await Promise.all([api('/events'), api('/meta')]);
   const live = events.find((e) => e.phase === 'live');
-  const sb = live ? await api(`/events/${live.slug}/scoreboard`) : null;
-  return `<section class="hero"><div class="pitch">
-      <div class="row wrap" style="margin-bottom:24px;gap:12px;align-items:center">
-        <div class="studio-badge"><span class="badge-dot" style="position:static;display:inline-block"></span> CIPHERARENA · STUDIO 2026</div>
-        ${meta.stats.live ? `<span class="tag live">${meta.stats.live} live now</span>` : ''}
-        <span class="hand-note">✦ 10 categories · real-time board</span>
-      </div>
-      <div>
-        <h1 style="font-size:clamp(44px,6vw,84px);line-height:0.92;margin-bottom:12px">THE ARENA<br><span style="color:var(--cyan)">IS OPEN.</span></h1>
-        ${UNDERLINE}
-      </div>
-      <p class="lede" style="margin-top:18px">Compete solo or with your team in high-stakes capture the flag events. Dynamic scoring, isolated container instances, and live real-time scoreboards engineered with studio precision.</p>
-      <div class="row wrap" style="gap:14px;margin-top:32px">
-        <a class="btn primary lg" href="#/events" style="box-shadow:3px 3px 0 var(--ink)">Browse competitions ${icon('arrowNE', 16)}</a>
-        <a class="btn lg" href="#/manage/new">Host an event</a>
-      </div>
-      <dl class="cells c4" style="margin-top:48px">${[['Players', meta.stats.users], ['Competitions', meta.stats.events], ['Live now', meta.stats.live], ['Flags captured', meta.stats.solves]].map(([k, v]) => `<div class="cell"><dt class="label">${k}</dt><dd class="mono" style="font-size:26px;font-weight:700;margin-top:6px;color:var(--ink)">${fmt(v)}</dd></div>`).join('')}</dl>
+  const showcase = events.filter((e) => e.phase !== 'ended').concat(events.filter((e) => e.phase === 'ended')).slice(0, 5);
+  const boards = {};
+  await Promise.all(showcase.filter((e) => e.phase !== 'upcoming').map(async (e) => { try { boards[e.slug] = await api(`/events/${e.slug}/scoreboard`); } catch { /* ignore */ } }));
+  const top = live ? boards[live.slug]?.rows.slice(0, 3) || [] : [];
+  const title = 'CipherArena'.split('').map((ch, i) => `<span style="--i:${i}">${ch}</span>`).join('');
+  const cats = Object.entries(CAT);
+  const marquee = cats.map(([id, [code, name]]) => `<span class="it">${esc(name)} <em class="${CATCOL[id]}">${code} · ${meta.byCategory[id] || 0}</em> ✦</span>`).join('');
+  return `<section class="hero2">
+    <div class="clock" data-clock></div>
+    <span class="ghost-cursor" style="left:9%;top:150px" data-depth="0.6">${CURSOR('#e01e5a')}<span class="tagl" style="background:var(--berry)">pwn</span></span>
+    <span class="ghost-cursor" style="right:10%;top:300px;animation-delay:-3s" data-depth="-0.5">${CURSOR('#ecb22e')}<span class="tagl" style="background:var(--yellow);color:var(--ink)">crypto</span></span>
+    <span class="ghost-cursor" style="left:14%;top:470px;animation-delay:-6s" data-depth="0.8">${CURSOR('#36c5f0')}<span class="tagl" style="background:var(--cyan);color:var(--ink)">web</span></span>
+    ${top.map((t, i) => `<span class="bubble" style="background:${avColor(t.name)};${['left:6%;top:290px', 'right:6%;top:150px', 'right:16%;top:520px'][i]};animation-delay:${-i * 1.6}s" title="#${t.rank} ${esc(t.name)}" data-depth="${0.4 + i * 0.3}">${esc(t.name.replace(/[^A-Za-z0-9]/g, '').slice(0, 2).toUpperCase())}</span>`).join('')}
+    <div class="stage">
+      <div class="intro">welcome to the${UNDERLINE}</div>
+      ${live ? `<a class="sticker mint s1" href="#/events/${esc(live.slug)}" data-depth="0.3">Live now · ${esc(live.name)}</a>` : `<a class="sticker mint s1" href="#/events" data-depth="0.3">${meta.stats.events} competitions listed</a>`}
+      <a class="sticker cream s2" href="#/leaderboard" data-depth="-0.3">${fmt(meta.stats.solves)} flags captured so far</a>
+      <h1 class="title sel" aria-label="CipherArena">${title}</h1>
+      <div class="status"><i></i>${meta.stats.live ? `${meta.stats.live} competition${meta.stats.live > 1 ? 's' : ''} live now` : 'Open for registration'} · ${fmt(meta.stats.users)} players</div>
     </div>
-    <div class="board-preview">${live ? `<div class="cell-h"><div><div class="label">Live scoreboard</div><h3 style="margin-top:4px">${esc(live.name)}</h3></div><span class="mono small dim">${when(live)}</span></div>
-      <table class="t"><tbody>${sb.rows.slice(0, 8).map((r) => `<tr><td class="mono" style="width:44px;font-weight:700;color:${r.rank <= 3 ? 'var(--cyan)' : 'var(--text-faint)'}">#${String(r.rank).padStart(2, '0')}</td><td style="font-weight:600">${esc(r.name)}</td><td class="mono dim small">${esc(r.country || '')}</td><td class="num" style="color:var(--ink)">${fmt(r.points)}</td></tr>`).join('')}</tbody></table>
-      <div class="cell-h" style="border-top:1px solid var(--rule);margin-top:auto"><span class="xs faint mono">${sb.rows.length} teams on the board</span><a class="btn sm" href="#/events/${esc(live.slug)}">Event page →</a></div>`
-      : '<div class="empty"><b>No competition is live right now.</b>Upcoming events are listed below.</div>'}</div></section>
-  <section class="section"><div class="section-h"><div><h2>Featured Arenas</h2><p class="small dim" style="margin-top:4px">Curated competitions built with isolated instances & dynamic scoring</p></div><span class="hand-note">← click to enter</span></div>
-    <div class="pj-grid">${events.slice(0, 3).map(pjCard).join('')}</div></section>
-  <section class="section"><div class="section-h"><h2>All Competitions</h2><a class="btn sm" href="#/events">Directory view →</a></div>${events.slice(0, 6).map(evRow).join('') || '<div class="empty">No published competitions yet.</div>'}</section>
-  <section class="section"><div class="section-h"><div><h2>Ten categories</h2><p class="small dim" style="margin-top:4px">Visible challenges across published events</p></div><span class="hand-note">Jeopardy style</span></div>
-    <div class="cells c5" style="border-left:0">${Object.entries(CAT).map(([id, [code, name]]) => `<div class="cell"><div class="row between"><span class="tag plain" style="font-weight:700">${code}</span><span class="mono dim small">${meta.byCategory[id] || 0}</span></div><div style="margin-top:14px;font-weight:700;font-size:15px">${name}</div></div>`).join('')}</div></section>
-  <section class="section"><div class="cells c2" style="border-left:0;border-top:0">
-    <div class="cell" style="padding:40px"><div class="label">For players</div><h2 style="margin:12px 0 16px;font-size:24px">One workspace from registration to certificate</h2><ul class="stack tight dim" style="list-style:none">
-      <li>✦ Board grouped by category, solved and locked states at a glance</li><li>✦ Per-team instances with countdowns and extensions</li><li>✦ Hints with their cost shown before you unlock</li><li>✦ Practice arena that never touches official rankings</li><li>✦ Certificates with a public verification ID</li></ul></div>
-    <div class="cell" style="padding:40px"><div class="label">For organizers</div><h2 style="margin:12px 0 16px;font-size:24px">Run the event without building infrastructure</h2><ul class="stack tight dim" style="list-style:none">
-      <li>✦ Six-step setup with draft, checklist and publish</li><li>✦ Static, regex and per-team dynamic flags</li><li>✦ Dynamic scoring, first-blood bonus, hint penalties, score freeze</li><li>✦ Integrity signals reviewed by people, never auto-banned</li><li>✦ CSV exports and certificate issuing</li></ul>
-      <a class="btn primary" style="margin-top:24px" href="#/manage/new">Create an event</a></div></div></section>`;
+    <p class="lead">Find ${SHAPE.target} competitions, capture flags ${SHAPE.flower} and climb a scoreboard that moves in real time ${SHAPE.cross}.</p>
+    <div class="ctas"><a class="btn primary lg" href="#/events">Browse competitions</a><a class="btn lg" href="#/manage/new">${icon('plus')}Host an event</a></div>
+  </section>
+  <div class="marquee" aria-hidden="true"><div class="track">${marquee}${marquee}</div></div>
+
+  <section class="sec2">
+    ${live && top.length ? `<div class="polaroid pol-l" data-depth="0.25"><div class="mini-sb">${top.map((t) => `<div><span>#${t.rank} ${esc(t.name)}</span><span>${fmt(t.points)}</span></div>`).join('')}</div><span class="cap">live board!</span></div>` : ''}
+    <div class="polaroid pol-r" data-depth="-0.25"><div class="term" style="font-size:11px;white-space:pre-wrap">$ submit CIPHERARENA{…}
+<span style="color:#2fbc81">✓ correct</span> +250
+rank 9 → 7</div><span class="cap">first blood</span></div>
+    <div class="head"><span class="hand-title">how it works!${SCRIBBLE}</span></div>
+    <p class="statement">CipherArena is a CTF platform ${SHAPE.diamond} where teams register, solve challenges ${SHAPE.bowtie} and watch every flag land on a live board ${SHAPE.target}.</p>
+    <div class="blocks">${cats.map(([id, [code, name]], i) => `<a class="blk ${CATCOL[id]}" href="#/events">${esc(name)} <small>${meta.byCategory[id] || 0}</small></a>${i % 2 ? '' : `<span class="ico ${CATCOL[(cats[i + 1] || cats[0])[0]]}">${icon(CATICO[id], 22)}</span>`}`).join('')}</div>
+    <div class="stats-row">${[['Players', meta.stats.users, 'k-cyan', '-2deg'], ['Competitions', meta.stats.events, 'k-yellow', '1.5deg'], ['Live now', meta.stats.live, 'k-berry', '-1deg'], ['Flags captured', meta.stats.solves, 'k-green', '2deg']].map(([k, v, c, r]) => `<div class="stat-card" style="--rot:${r};--cc:var(--${c.slice(2)})"><div class="label">${k}</div><div class="v">${fmt(v)}</div></div>`).join('')}</div>
+  </section>
+
+  <section class="sec2" style="padding-top:20px">
+    <div class="head"><span class="hand-title">explore the arena!${SCRIBBLE}</span><div class="label" style="margin-top:20px">Featured competitions</div></div>
+    <div class="stack-cards">${showcase.map((e, i) => folderCard(e, i, boards)).join('') || '<div class="empty"><b>No competitions yet.</b>Create the first one.</div>'}</div>
+    <div style="text-align:center;margin-top:34px"><a class="btn lg" href="#/events">All competitions ${icon('arrowNE')}</a></div>
+  </section>
+
+  <section class="sec2"><div class="notes">
+    <div class="note" style="--rot:-1.5deg;--cc:var(--green)"><span class="hand-title">for players${SCRIBBLE}</span><ul style="margin-top:22px">
+      <li>Board grouped by category, solved and locked at a glance</li><li>Per-team instances with countdowns and extensions</li><li>Hints that show their cost before you unlock</li><li>Practice sets that never touch official rankings</li><li>Certificates with a public verification ID</li></ul>
+      <div class="row" style="margin-top:20px"><a class="btn primary" href="#/${state.me ? 'dashboard' : 'signup'}">${state.me ? 'Open dashboard' : 'Create account'}</a><a class="btn" href="#/practice">Practice</a></div></div>
+    <div class="note" style="--rot:1.2deg;--cc:var(--cyan)"><span class="hand-title">for organizers${SCRIBBLE}</span><ul style="margin-top:22px">
+      <li>Six-step setup with draft, checklist and publish</li><li>Static, regex and per-team dynamic flags</li><li>Dynamic scoring, first blood bonus, score freeze</li><li>Integrity signals reviewed by people, never auto-banned</li><li>CSV exports and certificate issuing</li></ul>
+      <div class="row" style="margin-top:20px"><a class="btn primary" href="#/manage/new">Create an event</a><a class="btn" href="#/orgs">Organizations</a></div></div>
+  </div></section>
+
+  <section class="sec2"><div class="head"><span class="hand-title">let's play!${SCRIBBLE}</span></div>
+    <a class="cta-card" href="#/${state.me ? 'events' : 'signup'}" aria-label="${state.me ? 'Browse competitions' : 'Create an account'}"><span class="swirl"></span><span class="plate"><span class="dia">»</span><b>${state.me ? 'Compete' : 'Join'}</b><span class="dia">»</span></span></a>
+    <p class="mono xs dim" style="text-align:center;margin-top:16px">${state.me ? 'Browse open competitions and register your team.' : 'Free for players. Takes under a minute.'}</p></section>`;
 } });
 
 /* ---------- directory ---------- */
@@ -101,7 +141,7 @@ route('/events', { title: 'Competitions', view: async () => {
       <div class="row wrap" style="gap:8px"><input class="input" style="width:240px" placeholder="Search name or organizer" value="${esc(F.q)}" data-input="evq" aria-label="Search competitions">
       <select class="select" style="width:auto" data-change="evfmt" aria-label="Format"><option value="">Any format</option><option value="team" ${F.fmt === 'team' ? 'selected' : ''}>Team</option><option value="individual" ${F.fmt === 'individual' ? 'selected' : ''}>Individual</option></select>
       <select class="select" style="width:auto" data-change="evdiff" aria-label="Difficulty"><option value="">Any level</option>${Object.entries(DIFFW).map(([k, v]) => `<option value="${k}" ${F.diff === k ? 'selected' : ''}>${v}</option>`).join('')}</select></div></div>
-    <div class="panel" id="evlist" style="border-left:0;border-right:0">${listHtml()}</div></div>` };
+    <div class="evlist" id="evlist">${listHtml()}</div></div>` };
 } });
 const listHtml = () => filterEvents(CACHE).map(evRow).join('') || '<div class="empty"><b>No competitions match.</b>Clear a filter to see more.</div>';
 onAct('evphase', (el) => { F.phase = el.dataset.v; refresh(); });
@@ -128,7 +168,7 @@ route('/events/:slug', { view: async ({ params }) => {
   return { title: e.name, html: `<div style="border-bottom:1px solid var(--rule);box-shadow:inset 6px 0 0 ${esc(e.org?.accent || '#3d3337')}">
     <div class="page" style="padding-bottom:28px"><div class="crumbs"><a href="#/events">COMPETITIONS</a>/<span>${esc(e.slug.toUpperCase())}</span></div>
       <div class="row wrap between top" style="gap:24px"><div style="max-width:760px"><div class="row wrap">${phaseTag(e.phase, e.isPractice)}${e.visibility !== 'public' ? tag(e.visibility === 'invite' ? 'Invite only' : 'Private', 'info') : ''}${e.freezeAt ? tag('Scoreboard freezes ' + dtFmt(e.freezeAt), 'warn') : ''}</div>
-        <h1 style="font-size:44px;margin-top:14px">${esc(e.name)}</h1><p class="dim" style="font-size:16px;margin-top:8px">${esc(e.tagline || '')}</p>
+        <h1 class="sel" style="font-size:clamp(40px,6vw,88px);margin:26px 8px 6px;display:inline-block;padding:6px 12px">${esc(e.name)}</h1><p class="dim" style="font-size:16px;margin-top:8px">${esc(e.tagline || '')}</p>
         <div class="row small" style="margin-top:14px">${e.org ? `<a href="#/orgs/${esc(e.org.slug)}" class="row">${av(e.org.name)}<span>${esc(e.org.name)}</span>${e.org.verified ? tag('Verified', 'ok') : ''}</a>` : '<span class="dim">Independent event</span>'}</div></div>
         <div class="stack" style="min-width:240px">${cta}<div class="xs dim mono">${fmt(e.teams)} ${e.participation === 'team' ? 'teams' : 'players'} · ${fmt(e.participants)} people · ${e.challengeCount} challenges</div></div></div></div></div>
     <div class="page"><div class="cells c-main"><div><div class="cell-h"><h2>About</h2></div><div class="cell prose">${md(e.description) || '<p class="dim">No description yet.</p>'}</div>
@@ -167,7 +207,7 @@ onAct('withdraw', async () => {
 route('/practice', { title: 'Practice', view: async () => {
   const { events } = await api('/events?practice=1');
   return `<div class="page"><div class="pagehead"><div><h1>Practice</h1><p>Always-open challenge sets with free hints. Practice solves are counted separately and never change official rankings.</p></div></div>
-    <div class="panel" style="border-left:0;border-right:0">${events.map(evRow).join('') || '<div class="empty"><b>No practice sets yet.</b>An admin can create one by ticking "Practice" when creating an event.</div>'}</div></div>`;
+    <div class="evlist">${events.map(evRow).join('') || '<div class="empty"><b>No practice sets yet.</b>An admin can create one by ticking "Practice" when creating an event.</div>'}</div></div>`;
 } });
 route('/leaderboard', { title: 'Leaderboard', view: async () => {
   const { players } = await api('/leaderboard');
