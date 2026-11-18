@@ -77,7 +77,7 @@ route('/', { title: 'Compete. Exploit. Learn. Conquer.', view: async () => {
   const boards = {};
   await Promise.all(showcase.filter((e) => e.phase !== 'upcoming').map(async (e) => { try { boards[e.slug] = await api(`/events/${e.slug}/scoreboard`); } catch { /* ignore */ } }));
   const top = live ? boards[live.slug]?.rows.slice(0, 3) || [] : [];
-  const title = 'CipherArena'.split('').map((ch, i) => `<span style="--i:${i}">${ch}</span>`).join('');
+  const title = 'fs0cie1y'.split('').map((ch, i) => `<span style="--i:${i}">${ch}</span>`).join('');
   const cats = Object.entries(CAT);
   const marquee = cats.map(([id, [code, name]]) => `<span class="it">${esc(name)} <em class="${CATCOL[id]}">${code} · ${meta.byCategory[id] || 0}</em> ✦</span>`).join('');
   return `<section class="hero2">
@@ -90,7 +90,7 @@ route('/', { title: 'Compete. Exploit. Learn. Conquer.', view: async () => {
       <div class="intro">welcome to the${UNDERLINE}</div>
       ${live ? `<a class="sticker mint s1" href="#/events/${esc(live.slug)}" data-depth="0.3">Live now · ${esc(live.name)}</a>` : `<a class="sticker mint s1" href="#/events" data-depth="0.3">${meta.stats.events} competitions listed</a>`}
       <a class="sticker cream s2" href="#/leaderboard" data-depth="-0.3">${fmt(meta.stats.solves)} flags captured so far</a>
-      <h1 class="title sel" aria-label="CipherArena">${title}</h1>
+      <h1 class="title sel" aria-label="fs0cie1y"><img src="/img/logo.png" alt="">${title}</h1>
       <div class="status"><i></i>${meta.stats.live ? `${meta.stats.live} competition${meta.stats.live > 1 ? 's' : ''} live now` : 'Open for registration'} · ${fmt(meta.stats.users)} players</div>
     </div>
     <p class="lead">Find ${SHAPE.target} competitions, capture flags ${SHAPE.flower} and climb a scoreboard that moves in real time ${SHAPE.cross}.</p>
@@ -104,7 +104,7 @@ route('/', { title: 'Compete. Exploit. Learn. Conquer.', view: async () => {
 <span style="color:#2fbc81">✓ correct</span> +250
 rank 9 → 7</div><span class="cap">first blood</span></div>
     <div class="head"><span class="hand-title">how it works!${SCRIBBLE}</span></div>
-    <p class="statement">CipherArena is a CTF platform ${SHAPE.diamond} where teams register, solve challenges ${SHAPE.bowtie} and watch every flag land on a live board ${SHAPE.target}.</p>
+    <p class="statement">fs0cie1y is a CTF platform ${SHAPE.diamond} where teams register, solve challenges ${SHAPE.bowtie} and watch every flag land on a live board ${SHAPE.target}.</p>
     <div class="blocks">${cats.map(([id, [code, name]], i) => `<a class="blk ${CATCOL[id]}" href="#/events">${esc(name)} <small>${meta.byCategory[id] || 0}</small></a>${i % 2 ? '' : `<span class="ico ${CATCOL[(cats[i + 1] || cats[0])[0]]}">${icon(CATICO[id], 22)}</span>`}`).join('')}</div>
     <div class="stats-row">${[['Players', meta.stats.users, 'k-cyan', '-2deg'], ['Competitions', meta.stats.events, 'k-yellow', '1.5deg'], ['Live now', meta.stats.live, 'k-berry', '-1deg'], ['Flags captured', meta.stats.solves, 'k-green', '2deg']].map(([k, v, c, r]) => `<div class="stat-card" style="--rot:${r};--cc:var(--${c.slice(2)})"><div class="label">${k}</div><div class="v">${fmt(v)}</div></div>`).join('')}</div>
   </section>
@@ -250,7 +250,7 @@ route('/t/:slug', { view: async ({ params }) => {
 } });
 
 /* ---------- certificates ---------- */
-route('/verify', { title: 'Verify a certificate', view: ({ query }) => ({ html: `<div class="page narrow"><div class="pagehead"><div><h1>Verify a certificate</h1><p>Enter the ID printed on a CipherArena certificate.</p></div></div>
+route('/verify', { title: 'Verify a certificate', view: ({ query }) => ({ html: `<div class="page narrow"><div class="pagehead"><div><h1>Verify a certificate</h1><p>Enter the ID printed on a fs0cie1y certificate.</p></div></div>
   <form class="row" data-form="verify"><input class="input mono" name="code" value="${esc(query.code || '')}" placeholder="CA-XXXX-XXXX-XXXX" aria-label="Certificate ID" required><button class="btn primary" type="submit">Verify</button></form><div id="vres" style="margin-top:18px"></div></div>`,
   mount: () => { if (query.code) document.querySelector('[data-form=verify]').requestSubmit(); } }) });
 onForm('verify', async (f) => {

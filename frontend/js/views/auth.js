@@ -2,7 +2,7 @@
 import { api, route, state, go, loadMe, onForm, onAct, onChange, refresh } from '../core.js';
 import { esc, icon, toast, CAT } from '../ui.js';
 
-const side = `<div class="side-art"><div class="label">CipherArena</div><div><h2 style="font-size:34px;line-height:1.05">Every flag you submit<br>is checked on the server.</h2>
+const side = `<div class="side-art"><div class="label">fs0cie1y</div><div><h2 style="font-size:34px;line-height:1.05">Every flag you submit<br>is checked on the server.</h2>
   <div class="term" style="margin-top:24px">POST /api/events/ironveil-2026/challenges/2/submit
 { "result": "correct", "value": 100, "rank": 7 }</div></div><div class="xs faint mono">Passwords are hashed with bcrypt · sessions are httpOnly cookies</div></div>`;
 const wrap = (inner) => `<div class="auth">${side}<div class="formcol"><div>${inner}</div></div></div>`;

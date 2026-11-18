@@ -95,8 +95,8 @@ code, .prose code { font-family: var(--mono); font-size: .9em; background: var(-
 
 /* ---------- top bar ---------- */
 .topbar { position: sticky; top: var(--ruler); z-index: 40; display: flex; align-items: stretch; height: var(--nav); background: rgba(255, 255, 255, .92); backdrop-filter: blur(10px); border-bottom: 1px solid var(--rule); }
-.brand { display: flex; align-items: center; gap: 10px; padding: 0 16px 0 14px; font: 1000 17px var(--display); text-transform: uppercase; letter-spacing: -0.01em; }
-.brand .mark { width: 28px; height: 28px; transition: transform .5s var(--spring); }
+.brand { display: flex; align-items: center; gap: 10px; padding: 0 16px 0 14px; font: 1000 19px var(--display); text-transform: none; letter-spacing: -0.01em; }
+.brand .mark { width: 30px; height: 30px; border-radius: 6px; object-fit: cover; border: 1.5px solid var(--ink); transition: transform .5s var(--spring); }
 .brand:hover .mark { transform: rotate(-12deg) scale(1.08); }
 .brand b { font-weight: 1000; color: var(--cyan); -webkit-text-stroke: 0; }
 .topnav { display: flex; align-items: stretch; }
@@ -375,7 +375,7 @@ table.t { width: 100%; border-collapse: collapse; font-size: 14px; }
 .hero2 .stage { position: relative; margin-top: 70px; display: flex; flex-direction: column; align-items: center; }
 .hero2 .intro { position: relative; font: 400 30px/1 var(--hand); margin-bottom: 26px; }
 .hero2 .intro svg { position: absolute; left: -6%; bottom: -12px; width: 112%; height: 12px; }
-.hero2 .title { font: 1000 clamp(54px, 11vw, 168px)/0.86 var(--display); text-transform: uppercase; letter-spacing: -0.03em; padding: 14px 26px; }
+.hero2 .title { font: 1000 clamp(54px, 12vw, 180px)/0.86 var(--display); text-transform: none; letter-spacing: -0.03em; padding: 14px 26px; }
 .hero2 .title span { display: inline-block; animation: letterIn .7s var(--spring) both; animation-delay: calc(var(--i) * 45ms + .1s); }
 @keyframes letterIn { from { opacity: 0; transform: translateY(40%) rotate(8deg) scale(.8); } }
 .hero2 .status { margin-top: 24px; display: inline-flex; align-items: center; gap: 8px; font: 500 12.5px var(--mono); text-transform: uppercase; }
@@ -563,3 +563,8 @@ table.t { width: 100%; border-collapse: collapse; font-size: 14px; }
 }
 @media (pointer: coarse) { .you-cursor { display: none; } }
 .auth .side-art .faint, .auth .side-art .label { color: var(--ink); opacity: .65; }
+
+.dock-avatar .mark, .dock-brand .mark { border-radius: 50%; object-fit: cover; }
+.hero2 .title { display: inline-flex; align-items: center; gap: .12em; }
+.hero2 .title img { width: .82em; height: .82em; border-radius: .12em; border: 3px solid var(--ink); animation: letterIn .7s var(--spring) both; }
+@media (max-width: 640px) { .dock-inner, .dock-links { display: flex; flex-wrap: nowrap; gap: 2px; } .dock-item, .dock-brand, .dock-user { width: 38px; height: 38px; } }

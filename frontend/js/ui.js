@@ -21,7 +21,7 @@ const P = {
   trash: '<path d="M4 7h16M10 11v6M14 11v6M6 7l1 14h10l1-14M9 7V4h6v3"/>', edit: '<path d="M4 20h4L19 9l-4-4L4 16z"/>', logout: '<path d="M15 4h4v16h-4M10 8l-4 4 4 4M6 12h11"/>', upload: '<path d="M12 21V9M7 14l5-5 5 5M4 3h16"/>',
 };
 export const icon = (n, s = 15, cls = '') => `<svg class="${cls}" width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="square" stroke-linejoin="miter" aria-hidden="true">${P[n] || ''}</svg>`;
-export const MARK = '<svg class="mark" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="7" fill="#111212"/><path d="M16 6 26 25H6z" fill="none" stroke="#36c5f0" stroke-width="3" stroke-linejoin="round"/><circle cx="16" cy="18" r="2.6" fill="#ecb22e"/></svg>';
+export const MARK = '<img class="mark" src="/img/logo.png" alt="" width="28" height="28">';
 
 export const STAR = '<svg class="nudge-star" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 0L14.6 9.4L24 12L14.6 14.6L12 24L9.4 14.6L0 12L9.4 9.4L12 0Z"/></svg>';
 export const UNDERLINE = '<svg class="nudge-underline" viewBox="0 0 260 20" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M2.5 14.5C65.5 3.5 178 -3.5 257.5 14" stroke="#36C5F0" stroke-width="4" stroke-linecap="round"/></svg>';
@@ -30,7 +30,7 @@ export function rulerHtml(bottom = false) {
   let ticks = '';
   for (let px = 0; px <= 3000; px += 50) ticks += `<div class="ruler-tick ${px % 100 === 0 ? 'major' : 'minor'}"><span class="ruler-num">${px % 100 === 0 ? px : ''}</span></div>`;
   return `<div class="ruler ${bottom ? 'bottom' : ''}" ${bottom ? '' : 'id="ruler"'} aria-hidden="true"><div class="ruler-track">${ticks}${bottom ? '' : '<div class="ruler-mark" id="ruler-mark" style="opacity:0"><span>0</span></div>'}</div>
-    ${bottom ? '' : '<div class="ruler-meta"><span class="ruler-dot"></span><span class="ruler-status-text">CIPHERARENA · ONLINE</span><span class="ruler-time" data-clock>--:--:--</span></div>'}</div>`;
+    ${bottom ? '' : '<div class="ruler-meta"><span class="ruler-dot"></span><span class="ruler-status-text">FS0CIE1Y · ONLINE</span><span class="ruler-time" data-clock>--:--:--</span></div>'}</div>`;
 }
 export function startRulerClock() { /* clocks are driven by fx.js ([data-clock]) */ }
 
@@ -63,7 +63,7 @@ export function dockHtml(currentPath, me) {
 
   return `<nav class="floating-dock" aria-label="Quick navigation">
     <div class="dock-inner">
-      <a class="dock-brand" href="#/" title="CipherArena Home">
+      <a class="dock-brand" href="#/" title="fs0cie1y Home">
         <span class="dock-avatar">${MARK}</span>
       </a>
       <div class="dock-divider"></div>

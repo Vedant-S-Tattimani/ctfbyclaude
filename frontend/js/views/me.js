@@ -88,7 +88,7 @@ route('/certificates', { ...A, title: 'Certificates', view: async () => {
   return `<div class="page"><div class="pagehead"><div><h1>Certificates</h1><p>Organizers issue these after an event ends. Anyone can check one at <a class="link" href="#/verify">/verify</a>.</p></div></div>
     <div class="cells c3">${certificates.map((c) => `<div class="cell"><div class="cert"><div class="row between">${MARK.replace('class="mark"', 'width="26" height="26"')}<span class="mono xs faint">${esc(c.code)}</span></div>
       <div><div class="label">Certificate of ${c.kind}</div><div style="font-family:var(--display);font-stretch:112%;font-weight:700;font-size:22px;margin-top:8px">${esc(c.recipient)}</div><div class="small dim" style="margin-top:6px">Rank ${c.rank} of ${c.total}${c.team ? ` with ${esc(c.team)}` : ''} · ${esc(c.event)}</div></div>
-      <div class="row between xs faint"><span>${esc(c.org || 'CipherArena')}</span><span>${dateFmt(c.issuedAt)}</span></div></div>
+      <div class="row between xs faint"><span>${esc(c.org || 'fs0cie1y')}</span><span>${dateFmt(c.issuedAt)}</span></div></div>
       <div class="row" style="margin-top:12px"><a class="btn sm" href="#/verify?code=${esc(c.code)}">Verify</a><button class="btn ghost sm" data-act="copy" data-text="${esc(location.origin)}/#/verify?code=${esc(c.code)}">${icon('copy')}Copy link</button></div></div>`).join('') || '<div class="cell"><div class="empty"><b>No certificates yet.</b>They appear after an organizer finalizes an event you played.</div></div>'}</div></div>`;
 } });
 
