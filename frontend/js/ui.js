@@ -13,7 +13,7 @@ const P = {
   lock: '<rect x="5" y="11" width="14" height="10"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/>', server: '<rect x="3" y="4" width="18" height="7"/><rect x="3" y="13" width="18" height="7"/><path d="M7 7.5h.01M7 16.5h.01"/>',
   file: '<path d="M14 3H6v18h12V7zM14 3v4h4"/>', download: '<path d="M12 3v12M7 10l5 5 5-5M4 21h16"/>', bell: '<path d="M6 8a6 6 0 1 1 12 0c0 7 3 8 3 8H3s3-1 3-8M10 20a2 2 0 0 0 4 0"/>',
   menu: '<path d="M4 6h16M4 12h16M4 18h16"/>', user: '<circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/>', clock: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
-  alert: '<path d="M12 3 2 20h20zM12 10v4M12 17h.01"/>', info: '<circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7.5h.01"/>', copy: '<rect x="8" y="8" width="13" height="13"/><path d="M16 8V3H3v13h5"/>',
+  alert: '<path d="M12 3 2 20h20zM12 10v4M12 17h.01"/>', info: '<circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7.5h.01"/>', help: '<circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.7.3-1 .9-1 1.6v.6M12 17h.01"/>', copy: '<rect x="8" y="8" width="13" height="13"/><path d="M16 8V3H3v13h5"/>',
   play: '<path d="M7 4v16l13-8z"/>', stop: '<rect x="6" y="6" width="12" height="12"/>', refresh: '<path d="M20 11a8 8 0 1 0-2.3 5.7M20 4v7h-7"/>', plus: '<path d="M12 5v14M5 12h14"/>',
   arrowL: '<path d="M19 12H5M11 6l-6 6 6 6"/>', arrowR: '<path d="M5 12h14M13 6l6 6-6 6"/>', up: '<path d="M12 19V5M6 11l6-6 6 6"/>', down: '<path d="M12 5v14M6 13l6 6 6-6"/>',
   eye: '<path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>', shield: '<path d="M12 3 4 6v6c0 5 3.5 8 8 9 4.5-1 8-4 8-9V6z"/>',
@@ -51,6 +51,7 @@ export function dockHtml(currentPath, me) {
     { href: '#/events', label: 'Competitions', icon: 'grid', active: p.startsWith('/events') },
     { href: '#/practice', label: 'Practice', icon: 'sparkle', active: p === '/practice' },
     { href: '#/leaderboard', label: 'Scoreboard', icon: 'trophy', active: p === '/leaderboard' },
+    { href: '#/guide', label: 'Guide', icon: 'help', active: p === '/guide' },
   ];
   if (me) {
     links.push({ href: '#/dashboard', label: 'Dashboard', icon: 'target', active: p === '/dashboard' });

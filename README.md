@@ -16,6 +16,12 @@ npm run dev
 
 The backend serves the frontend from the sibling `frontend/` directory by default.
 
+## Guides
+
+- **In the app:** the **Guide** button in the navigation bar (`#/guide`) covers signing in, security, teams, competing, practice and hosting, with searchable FAQs.
+- **User guide (PDF):** [frontend/guides/fs0cie1y-user-guide.pdf](frontend/guides/fs0cie1y-user-guide.pdf), also downloadable from the Guide page.
+- **Admin guide (PDF):** [docs/guides/fs0cie1y-admin-guide.pdf](docs/guides/fs0cie1y-admin-guide.pdf): setup, platform administration, hosting, maintenance and troubleshooting.
+
 ## Running Separately (Development)
 
 ### Backend only (API on port 3000):

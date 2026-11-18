@@ -593,3 +593,30 @@ table.t { width: 100%; border-collapse: collapse; font-size: 14px; }
 
 .hero2 .title { display: inline-flex; align-items: center; gap: .12em; }
 .hero2 .title img { width: .82em; height: .82em; border-radius: .12em; border: 3px solid var(--ink); animation: letterIn .7s var(--spring) both; }
+
+/* ---------- guide ---------- */
+.guide [hidden] { display: none !important; }
+.guide-layout { display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 28px; align-items: start; max-width: 1100px; }
+.guide-toc { position: sticky; top: 90px; display: flex; flex-direction: column; gap: 2px; }
+.guide-toc .label { margin-bottom: 8px; }
+.guide-toc a { padding: 7px 10px; border-left: 2px solid var(--rule); font-size: 13.5px; color: var(--dim); }
+.guide-toc a:hover { border-left-color: var(--cyan); color: var(--ink); }
+.guide-sec { scroll-margin-top: 90px; }
+#g-faq { scroll-margin-top: 90px; }
+.guide-steps { padding-left: 22px; display: grid; gap: 8px; line-height: 1.6; }
+.guide-steps li::marker { font-family: var(--mono); font-weight: 600; }
+.faq { border-bottom: 1px solid var(--rule); }
+.faq:last-child { border-bottom: 0; }
+.faq summary { cursor: pointer; padding: 13px 0; font-weight: 500; list-style: none; display: flex; justify-content: space-between; gap: 12px; }
+.faq summary::-webkit-details-marker { display: none; }
+.faq summary::after { content: '+'; font-family: var(--mono); color: var(--dim); }
+.faq[open] summary::after { content: '−'; }
+.faq p { color: var(--dim); padding: 0 0 14px; line-height: 1.6; max-width: 72ch; }
+.faq-list { padding-top: 4px; padding-bottom: 4px; }
+@media (max-width: 960px) {
+  .guide-layout { grid-template-columns: 1fr; }
+  .guide-toc { position: static; flex-direction: row; flex-wrap: wrap; gap: 6px; }
+  .guide-toc .label { width: 100%; margin-bottom: 2px; }
+  .guide-toc a { border: 1px solid var(--rule); border-radius: 2px; padding: 6px 10px; }
+}
+@media (pointer: coarse) { .faq summary { min-height: 44px; align-items: center; } .guide-toc a { min-height: 40px; display: inline-flex; align-items: center; } }

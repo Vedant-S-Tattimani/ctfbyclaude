@@ -91,7 +91,7 @@ export function closePops() { document.querySelectorAll('.pop').forEach((p) => p
 /* ---------- shells ---------- */
 function topbar(c, { menu = false } = {}) {
   const me = state.me; const p = c.path;
-  const nav = [['/', 'Home', 'home'], ['/events', 'Competitions', 'grid'], ['/practice', 'Practice', 'book'], ['/leaderboard', 'Leaderboard', 'trophy'], ['/orgs', 'Organizations', 'building']];
+  const nav = [['/', 'Home', 'home'], ['/events', 'Competitions', 'grid'], ['/practice', 'Practice', 'book'], ['/leaderboard', 'Leaderboard', 'trophy'], ['/orgs', 'Organizations', 'building'], ['/guide', 'Guide', 'help']];
   const isOn = (h) => (h === '/' ? p === '/' : p.startsWith(h));
   return `<header class="topbar">${menu ? `<button class="iconbtn menu-btn" data-act="side" aria-label="Open navigation">${icon('menu', 18)}</button>` : ''}
     <a class="brand" href="#/" aria-label="fs0cie1y home">${MARK}<span class="word">fs0cie<b>1y</b></span></a>
@@ -121,7 +121,7 @@ function arenaSide(c) {
     <div class="grp label">You</div>${sideLink('/dashboard', 'Dashboard', false)}${sideLink('/teams', 'Teams', false)}
     ${a?.team ? `<div class="foot"><div class="label">${esc(a.team.name || 'Solo')}</div><div class="row between" style="margin-top:8px"><span class="dim small">Rank</span><span class="mono">#${a.team.rank} / ${a.team.of}</span></div><div class="row between"><span class="dim small">Points</span><span class="mono">${a.team.points}</span></div><div class="row between"><span class="dim small">Solved</span><span class="mono">${a.team.solved}</span></div></div>` : ''}`;
 }
-function footer() { return `<footer class="footer"><span>fs0cie<b>1y</b> · capture the flag platform · <span data-clock></span></span><span class="row wrap" style="gap:10px 18px"><a href="#/verify">Verify certificate</a><a href="#/orgs">Organizations</a><a href="#/events">Competitions</a><a href="#/manage/new">Host an event</a></span></footer>${rulerHtml(true)}`; }
+function footer() { return `<footer class="footer"><span>fs0cie<b>1y</b> · capture the flag platform · <span data-clock></span></span><span class="row wrap" style="gap:10px 18px"><a href="#/verify">Verify certificate</a><a href="#/orgs">Organizations</a><a href="#/events">Competitions</a><a href="#/manage/new">Host an event</a><a href="#/guide">Guide &amp; FAQs</a></span></footer>${rulerHtml(true)}`; }
 const floatCta = (me) => `<a class="float-cta" href="#/${me && me.role !== 'participant' ? 'manage/new' : 'events'}">${icon('heart', 14)}${me && me.role !== 'participant' ? 'Host an event' : 'Find a CTF'}</a>`;
 function shellFor(c, html) {
   const sh = c.r.shell || 'public';
@@ -147,7 +147,7 @@ onAct('readall', async () => { await api('/me/notifications/read', { method: 'PO
 onAct('usermenu', (el) => {
   const me = state.me;
   pop(el, `<div class="item"><b>${esc(me.displayName || me.username)}</b><div class="xs dim mono">@${esc(me.username)} · ${esc(me.role)}</div></div>
-    <a class="item" href="#/u/${esc(me.username)}">Public profile</a><a class="item" href="#/teams">Teams</a><a class="item" href="#/settings">Settings & security</a>
+    <a class="item" href="#/u/${esc(me.username)}">Public profile</a><a class="item" href="#/teams">Teams</a><a class="item" href="#/settings">Settings & security</a><a class="item" href="#/guide">Guide & FAQs</a>
     ${me.role !== 'participant' ? '<a class="item" href="#/manage">Organizer workspace</a>' : ''}${me.role === 'admin' ? '<a class="item" href="#/admin">Platform admin</a>' : ''}
     <button class="item" data-act="logout">Sign out</button>`);
 });
