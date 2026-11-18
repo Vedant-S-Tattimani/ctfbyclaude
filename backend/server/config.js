@@ -1,7 +1,7 @@
 // Runtime configuration from environment variables (see .env.example).
 import path from 'node:path';
 import fs from 'node:fs';
-import crypto from 'node:crypto';
+import dns from 'node:dns';
 import { fileURLToPath } from 'node:url';
 
 export const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -15,30 +15,23 @@ if (fs.existsSync(envFile)) {
   }
 }
 
+// Some hosts' default resolver cannot answer the SRV lookups that mongodb+srv:// URIs need.
+if (process.env.DNS_SERVERS) dns.setServers(process.env.DNS_SERVERS.split(',').map((s) => s.trim()).filter(Boolean));
+
 const dataDir = path.resolve(ROOT, process.env.DATA_DIR || 'data');
-fs.mkdirSync(dataDir, { recursive: true });
-
-// A stable secret is needed for dynamic flags; generate and persist one if not provided.
-function persistentSecret() {
-  if (process.env.APP_SECRET) return process.env.APP_SECRET;
-  const f = path.join(dataDir, '.app_secret');
-  if (!fs.existsSync(f)) fs.writeFileSync(f, crypto.randomBytes(32).toString('hex'), { mode: 0o600 });
-  return fs.readFileSync(f, 'utf8').trim();
-}
-
-// Resolve the frontend directory: defaults to ../frontend (sibling folder in monorepo layout)
-const frontendDir = path.resolve(ROOT, process.env.FRONTEND_DIR || path.join('..', 'frontend'));
 
 export const config = {
   port: Number(process.env.PORT || 3000),
   host: process.env.HOST || '0.0.0.0',
   prod: process.env.NODE_ENV === 'production',
   baseUrl: process.env.BASE_URL || `http://localhost:${process.env.PORT || 3000}`,
-  dataDir,
-  frontendDir,
-  dbPath: path.join(dataDir, process.env.DB_FILE || 'cipherarena.db'),
+  mongoUri: process.env.MONGODB_URI || '',
+  mongoDb: process.env.MONGODB_DB || 'cipherarena',
+  frontendDir: path.resolve(ROOT, process.env.FRONTEND_DIR || path.join('..', 'frontend')),
+  // Challenge attachments live on disk, not in the database, to keep database storage small.
   uploadDir: path.join(dataDir, 'uploads'),
-  secret: persistentSecret(),
+  // Secret for per-team dynamic flags. When unset, one is generated and stored in the database on first start.
+  secret: process.env.APP_SECRET || '',
   sessionDays: Number(process.env.SESSION_DAYS || 14),
   maxUploadMb: Number(process.env.MAX_UPLOAD_MB || 100),
   loginPerIp: Number(process.env.LOGIN_LIMIT_PER_IP || 60), // per 10 minutes, all accounts

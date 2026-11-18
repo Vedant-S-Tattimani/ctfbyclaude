@@ -139,7 +139,7 @@ route('/projector/:slug', { shell: 'bare', title: 'Projector', view: async ({ pa
   prevRanks = {}; SB = null; const s = await loadSB(params.slug);
   return `<div class="proj"><div class="row between wrap" style="margin-bottom:28px;gap:20px"><div><div class="label">Live scoreboard</div><h1 style="font-size:40px;margin-top:6px">${esc(s.name)}</h1></div>
     <div class="row" style="gap:28px"><div style="text-align:right"><div class="label">${s.phase === 'ended' ? 'Ended' : 'Time left'}</div><div class="mono" id="cd" data-end="${s.endsAt}" style="font-size:40px;font-weight:600">${s.phase === 'ended' ? '00:00:00' : clock(s.endsAt - Date.now())}</div></div><a class="btn" href="#/arena/${esc(params.slug)}/scoreboard">Exit</a></div></div>
-    <div class="cells" style="grid-template-columns:minmax(0,2fr) minmax(0,1fr)"><div><table class="t"><tbody id="sbt">${sbRows(s.rows.slice(0, 12), true)}</tbody></table></div><div class="hide-m"><div class="cell-h"><h3>Latest solves</h3></div><div id="recent">${recentHtml(s.recent.slice(0, 10))}</div></div></div>${s.frozen ? `<p class="warn mono" style="margin-top:16px">Scoreboard frozen at ${dtFmt(s.freezeAt)}</p>` : ''}</div>`;
+    <div class="cells c-wide"><div><table class="t"><tbody id="sbt">${sbRows(s.rows.slice(0, 12), true)}</tbody></table></div><div class="hide-m"><div class="cell-h"><h3>Latest solves</h3></div><div id="recent">${recentHtml(s.recent.slice(0, 10))}</div></div></div>${s.frozen ? `<p class="warn mono" style="margin-top:16px">Scoreboard frozen at ${dtFmt(s.freezeAt)}</p>` : ''}</div>`;
 } });
 // live updates
 streamHandlers.add(async (d) => {

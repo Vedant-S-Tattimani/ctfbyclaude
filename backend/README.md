@@ -2,36 +2,27 @@
 
 A self-hosted platform for running Capture the Flag competitions: event discovery, teams, a Jeopardy board with server-side flag checking, a live scoreboard, organizer tooling, integrity review and platform administration.
 
-Node.js (22.13 or newer) + Express + the built-in `node:sqlite` driver on the server, a dependency-free single-page app in the browser. One process, one database file, no native build step.
+Node.js (20 or newer) + Express + MongoDB (the official `mongodb` driver) on the server, a dependency-free single-page app in the browser. One process; all data lives in MongoDB (Atlas works out of the box), challenge attachments on local disk.
 
 ## Quick start
 
 ```bash
 npm install
+cp .env.example .env # then set MONGODB_URI and the ADMIN_* values
 npm start            # http://localhost:3000
 ```
 
-The first start creates `data/cipherarena.db` and loads demo data (fictional people, teams and events, including a live competition). Every demo account uses the password `cipherarena-demo`:
-
-| Username | Role | Try |
-|---|---|---|
-| `k3rnel_v` | participant, owner of *Segfault Syndicate* | Solve challenges in IronVeil CTF 2026, manage the team |
-| `mira_o` | organizer, owner of IronVeil and *Obsidian Bay University CSC* | Edit challenges, review integrity signals, create an event |
-| `admin` | platform admin | Users, organizations, events, audit log |
-
-Some IronVeil flags to try as `k3rnel_v`: `CIPHERARENA{lll_sings_you_to_sleep}` (Lattice Lullaby), `CIPHERARENA{never_reuse_a_nonce}` (Nonce Sense). The rest are in `scripts/seed.js`.
+The first start creates the collections and indexes and, if the database has no platform admin yet, creates one from `ADMIN_USERNAME`, `ADMIN_EMAIL` and `ADMIN_PASSWORD`. Nothing else is preloaded: sign in as that admin, create an organization or event, and invite people.
 
 Other commands:
 
 ```bash
 npm run dev          # restart on file changes
-npm run reset        # wipe the database and reseed
-SEED_DEMO=0 npm start  # start with an empty database
-npm test             # 16 end-to-end API tests on a throwaway database
+npm run bootstrap    # create the admin from ADMIN_* without starting the server
+npm test             # 16 end-to-end API tests on a throwaway database that is dropped afterwards
 ```
 
-To create your first real admin on an empty database: sign up, then run
-`sqlite3 data/cipherarena.db "UPDATE users SET role='admin', email_verified=1 WHERE username='you';"`.
+If `mongodb+srv://` URIs fail with `querySrv ECONNREFUSED`, your system resolver can't answer SRV lookups from Node; set `DNS_SERVERS=1.1.1.1,8.8.8.8`.
 
 ## What works
 
@@ -58,8 +49,6 @@ To create your first real admin on an empty database: sign up, then run
 
 Set `INSTANCE_PROVIDER=docker` on a host with Docker. For a challenge with an image and port, each team gets its own container started with `docker run -d --rm --memory 256m --cpus 0.5 --pids-limit 128 -p 0:<port> -e FLAG=<team flag>`. Instances expire after the challenge's lifetime (default 45 minutes), can be extended twice by 30 minutes, and are stopped by a reaper. Set `INSTANCE_HOST` to the hostname players should connect to. With the default `none`, instance challenges tell players that instances are not enabled.
 
-The seeded images (`ghcr.io/cipherarena/...`) are placeholders; point the challenges at images you build.
-
 ## Email
 
 There is no mail sender built in. Verification and password-reset links are printed to the server log, and outside production they are also shown in the UI so the flow can be completed locally. To send real email, replace the `console.log` in `issueEmailToken` (`server/routes/auth.js`) with your SMTP or API client.
@@ -68,12 +57,12 @@ There is no mail sender built in. Verification and password-reset links are prin
 
 ```bash
 docker build -t cipherarena .
-docker run -p 3000:3000 -v cipherarena-data:/data -e BASE_URL=https://ctf.example.org cipherarena
+docker run -p 3000:3000 -v cipherarena-data:/data -e MONGODB_URI='mongodb+srv://...' -e BASE_URL=https://ctf.example.org cipherarena
 ```
 
-Run it behind HTTPS (Caddy, nginx) and set `TRUST_PROXY=1` so rate limits and IP evidence see real client addresses. `NODE_ENV=production` turns on secure cookies and HSTS and hides dev links. Back up `DATA_DIR` (database, uploads and `.app_secret`, which dynamic flags depend on). All settings are listed in `.env.example`.
+Run it behind HTTPS (Caddy, nginx) and set `TRUST_PROXY=1` so rate limits and IP evidence see real client addresses. `NODE_ENV=production` turns on secure cookies and HSTS and hides dev links. Back up the MongoDB database (it also holds the generated dynamic-flag secret unless you set `APP_SECRET`) and `DATA_DIR/uploads` (challenge attachments). All settings are listed in `.env.example`.
 
-SQLite in WAL mode comfortably handles a few thousand concurrent players on one machine. Scoreboards are computed per request; for very large events put a short cache in front of `/api/events/:slug/scoreboard`.
+Sessions and email tokens expire through MongoDB TTL indexes, so they don't pile up in storage. Run the server close to the database (same cloud region): requests make several small queries, so latency adds up. Scoreboards are computed per request; for very large events put a short cache in front of `/api/events/:slug/scoreboard`.
 
 ## Layout
 
@@ -81,17 +70,17 @@ SQLite in WAL mode comfortably handles a few thousand concurrent players on one 
 server/
   index.js          HTTP server, security headers, error handling
   config.js         environment configuration
-  db.js             schema, helpers, audit log, notifications
+  db.js             MongoDB connection, indexes, numeric ids, helpers, audit log, notifications
   lib.js            validation, sessions, auth middleware, rate limits, TOTP
   core.js           permissions, phases, scoring, flag checks, integrity signals, SSE hub
   instances.js      per-team container instances
   routes/           auth, events (arena), teams, manage (organizer), platform (orgs, admin)
 public/
   index.html, css/app.css, js/core.js (router, API client), js/ui.js, js/views/*
-scripts/seed.js     demo data
-test/api.test.js    end-to-end API tests
+scripts/bootstrap.js first platform admin from ADMIN_* settings
+test/api.test.js    end-to-end API tests (fixtures in test/fixtures.js)
 ```
 
 ## Not included
 
-Payments (events can show a fee note; collecting it is up to you), an SMTP sender, OAuth providers, attack-defense format, and a writeup editor. The seed data is fictional.
+Payments (events can show a fee note; collecting it is up to you), an SMTP sender, OAuth providers, attack-defense format, and a writeup editor.

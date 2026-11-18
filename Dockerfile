@@ -9,5 +9,5 @@ RUN mkdir -p /data && chown node:node /data
 VOLUME ["/data"]
 EXPOSE 3000
 USER node
-CMD ["node", "--disable-warning=ExperimentalWarning", "backend/server/index.js"]
+CMD ["node", "backend/server/index.js"]
 
