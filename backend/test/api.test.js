@@ -1,20 +1,25 @@
-// End-to-end API tests against a fresh, seeded database. Run: npm test
+// End-to-end API tests. They run against a throwaway database (<MONGODB_DB>_test_<random>) that is dropped afterwards.
+// Run: npm test   (needs MONGODB_URI in backend/.env or the environment)
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
-import fs from 'node:fs';
-import os from 'node:os';
-import path from 'node:path';
+import crypto from 'node:crypto';
 
-const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ca-test-'));
-process.env.DATA_DIR = dir; process.env.NODE_ENV = 'test'; process.env.EXPOSE_DEV_LINKS = '1'; process.env.LOGIN_LIMIT_PER_IP = '1000';
+process.env.NODE_ENV = 'test'; process.env.EXPOSE_DEV_LINKS = '1'; process.env.LOGIN_LIMIT_PER_IP = '1000';
+const { config } = await import('../server/config.js');
+const { connectDb, closeDb, dropDb, findOne, count } = await import('../server/db.js');
 const { createApp } = await import('../server/index.js');
-const { seed } = await import('../scripts/seed.js');
-const { db, one } = await import('../server/db.js');
-const { dynamicFlag, totpAt } = { ...(await import('../server/core.js')), ...(await import('../server/lib.js')) };
-seed();
+const { loadFixtures, PASSWORD } = await import('./fixtures.js');
+const { dynamicFlag } = await import('../server/core.js');
+const { totpAt } = await import('../server/lib.js');
+
 let server, base;
-before(async () => { server = createApp().listen(0); await new Promise((r) => server.once('listening', r)); base = `http://127.0.0.1:${server.address().port}/api`; });
-after(() => { server.close(); db.close(); fs.rmSync(dir, { recursive: true, force: true }); });
+before(async () => {
+  await connectDb({ dbName: `${config.mongoDb}_test_${crypto.randomBytes(4).toString('hex')}` });
+  await loadFixtures();
+  server = createApp().listen(0); await new Promise((r) => server.once('listening', r));
+  base = `http://127.0.0.1:${server.address().port}/api`;
+});
+after(async () => { server?.close(); await dropDb(); await closeDb(); });
 
 function client() {
   let cookie = '';
@@ -25,7 +30,7 @@ function client() {
     return { status: res.status, data };
   };
 }
-const login = async (u) => { const c = client(); const r = await c('/auth/login', { method: 'POST', body: { login: u, password: 'cipherarena-demo' } }); assert.equal(r.status, 200); return c; };
+const login = async (u) => { const c = client(); const r = await c('/auth/login', { method: 'POST', body: { login: u, password: PASSWORD } }); assert.equal(r.status, 200); return c; };
 
 test('CSRF header is required for mutations', async () => {
   const r = await fetch(`${base}/auth/login`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
@@ -50,7 +55,7 @@ test('two-factor: enable, then login requires code', async () => {
   const s = await c('/me/2fa/setup', { method: 'POST' });
   const code = totpAt(s.data.secret, Math.floor(Date.now() / 30000));
   assert.equal((await c('/me/2fa/enable', { method: 'POST', body: { code } })).status, 200);
-  const c2 = client(); const l = await c2('/auth/login', { method: 'POST', body: { login: 'ada_hex', password: 'cipherarena-demo' } });
+  const c2 = client(); const l = await c2('/auth/login', { method: 'POST', body: { login: 'ada_hex', password: PASSWORD } });
   assert.equal(l.data.twoFactor, true);
   assert.equal((await c2('/auth/me')).data.user, null);
   assert.equal((await c2('/auth/2fa', { method: 'POST', body: { code: '000000' } })).status, 400);
@@ -81,24 +86,24 @@ test('case-insensitive and regex flags', async () => {
 });
 test('dynamic flags: own flag works, another team\'s raises an integrity signal', async () => {
   const c = await login('k3rnel_v');
-  const ch = one("SELECT * FROM challenges WHERE name='Heap of Trouble'");
-  const mine = one("SELECT id FROM teams WHERE name='Segfault Syndicate'").id, theirs = one("SELECT id FROM teams WHERE name='nullroute'").id;
-  const before = one("SELECT COUNT(*) n FROM incidents WHERE kind='flag_sharing'").n;
+  const ch = await findOne('challenges', { name: 'Heap of Trouble' });
+  const mine = (await findOne('teams', { name: 'Segfault Syndicate' })).id, theirs = (await findOne('teams', { name: 'nullroute' })).id;
+  const before = await count('incidents', { kind: 'flag_sharing' });
   const r1 = await c(`/events/ironveil-2026/challenges/${ch.id}/submit`, { method: 'POST', body: { flag: dynamicFlag(ch, theirs) } });
   assert.equal(r1.data.result, 'incorrect');
-  assert.equal(one("SELECT COUNT(*) n FROM incidents WHERE kind='flag_sharing'").n, before + 1);
+  assert.equal(await count('incidents', { kind: 'flag_sharing' }), before + 1);
   const r2 = await c(`/events/ironveil-2026/challenges/${ch.id}/submit`, { method: 'POST', body: { flag: dynamicFlag(ch, mine) } });
   assert.equal(r2.data.result, 'correct');
 });
 test('locked challenge is not reachable before its prerequisite', async () => {
   const c = await login('felix');
-  const fb = one("SELECT id FROM challenges WHERE name='Final Boss'").id;
+  const fb = (await findOne('challenges', { name: 'Final Boss' })).id;
   assert.equal((await c(`/events/ironveil-2026/challenges/${fb}`)).status, 404);
 });
 test('hints cost points', async () => {
   const c = await login('k3rnel_v');
   const before = (await c('/events/ironveil-2026/challenges')).data.team.points;
-  const ch = one("SELECT id FROM challenges WHERE name='Template Tango'").id; const h = one('SELECT id, cost FROM hints WHERE challenge_id=? AND cost>0', ch);
+  const ch = (await findOne('challenges', { name: 'Template Tango' })).id; const h = await findOne('hints', { challenge_id: ch, cost: { $gt: 0 } });
   const r = await c(`/events/ironveil-2026/challenges/${ch}/hints/${h.id}/unlock`, { method: 'POST' }); assert.ok(r.data.content);
   const after = (await c('/events/ironveil-2026/challenges')).data.team.points;
   assert.equal(before - after, h.cost);
@@ -128,7 +133,7 @@ test('approval registration goes to pending; organizer approves', async () => {
   // felix is already registered for Nightshift with nullroute: blocked
   const clash = await lena('/events/nightshift-quals/register', { method: 'POST', body: { teamId: team.id } });
   assert.match(clash.data.error, /already registered with another team/);
-  const felixId = one("SELECT id FROM users WHERE username='felix'").id;
+  const felixId = (await findOne('users', { username: 'felix' })).id;
   assert.equal((await lena(`/teams/${team.slug}/members/${felixId}`, { method: 'DELETE' })).status, 200);
   const r = await lena('/events/nightshift-quals/register', { method: 'POST', body: { teamId: team.id } }); assert.equal(r.data.status, 'pending');
   const vsg = await login('vsg_lind'); const regs = (await vsg('/manage/events/nightshift-quals/registrations')).data.registrations;
@@ -138,7 +143,7 @@ test('approval registration goes to pending; organizer approves', async () => {
 });
 test('organizer: create event, challenge, publish checklist, test flag', async () => {
   const m = await login('mira_o');
-  const ev = await m('/manage/events', { method: 'POST', body: { name: 'Test Event 9', org_id: one("SELECT id FROM orgs WHERE slug='obsidian-bay-csc'").id, starts_at: Date.now() - 1000, ends_at: Date.now() + 3600_000, description: 'x', rules: 'y' } });
+  const ev = await m('/manage/events', { method: 'POST', body: { name: 'Test Event 9', org_id: (await findOne('orgs', { slug: 'obsidian-bay-csc' })).id, starts_at: Date.now() - 1000, ends_at: Date.now() + 3600_000, description: 'x', rules: 'y' } });
   assert.equal(ev.status, 200);
   assert.equal((await m(`/manage/events/${ev.data.slug}/publish`, { method: 'POST' })).status, 400);
   const c = await m(`/manage/events/${ev.data.slug}/challenges`, { method: 'POST', body: { name: 'T1', category: 'web', flag: 'CIPHERARENA{t1}', state: 'visible' } });
@@ -153,16 +158,16 @@ test('integrity actions are recorded and revoke solves', async () => {
   const inc = (await m('/manage/events/ironveil-2026/incidents')).data.incidents.find((i) => i.kind === 'flag_sharing');
   assert.equal((await m(`/manage/events/ironveil-2026/incidents/${inc.id}/notes`, { method: 'POST', body: { body: 'Contacted both captains.' } })).status, 200);
   assert.equal((await m(`/manage/events/ironveil-2026/incidents/${inc.id}/action`, { method: 'POST', body: { action: 'warn', reason: 'Shared flag' } })).status, 200);
-  assert.ok(one("SELECT 1 FROM audit_log WHERE action='incident.warn'"));
+  assert.ok(await findOne('audit_log', { action: 'incident.warn' }));
 });
 test('admin: suspend signs the user out; non-admin blocked', async () => {
   const a = await login('admin'); const victim = await login('hoot');
-  const id = one("SELECT id FROM users WHERE username='hoot'").id;
+  const id = (await findOne('users', { username: 'hoot' })).id;
   assert.equal((await a(`/admin/users/${id}`, { method: 'PATCH', body: { status: 'suspended' } })).status, 200);
   assert.equal((await victim('/auth/me')).data.user, null);
   assert.equal((await (await login('k3rnel_v'))('/admin/overview')).status, 403);
 });
 test('scoreboard and certificate verification are public', async () => {
-  const sb = await client()('/events/ironveil-2026/scoreboard'); assert.ok(sb.data.rows.length >= 16);
-  assert.equal((await client()('/certificates/CA-COLD-2026-KAIV')).data.certificate.username, 'k3rnel_v');
+  const sb = await client()('/events/ironveil-2026/scoreboard'); assert.equal(sb.data.rows.length, 2);
+  assert.equal((await client()('/certificates/ca-test-kaiv')).data.certificate.username, 'k3rnel_v');
 });

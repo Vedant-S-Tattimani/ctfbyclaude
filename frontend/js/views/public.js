@@ -121,7 +121,7 @@ rank 9 → 7</div><span class="cap">first blood</span></div>
       <div class="row" style="margin-top:20px"><a class="btn primary" href="#/${state.me ? 'dashboard' : 'signup'}">${state.me ? 'Open dashboard' : 'Create account'}</a><a class="btn" href="#/practice">Practice</a></div></div>
     <div class="note" style="--rot:1.2deg;--cc:var(--cyan)"><span class="hand-title">for organizers${SCRIBBLE}</span><ul style="margin-top:22px">
       <li>Six-step setup with draft, checklist and publish</li><li>Static, regex and per-team dynamic flags</li><li>Dynamic scoring, first blood bonus, score freeze</li><li>Integrity signals reviewed by people, never auto-banned</li><li>CSV exports and certificate issuing</li></ul>
-      <div class="row" style="margin-top:20px"><a class="btn primary" href="#/manage/new">Create an event</a><a class="btn" href="#/orgs">Organizations</a></div></div>
+      <div class="row wrap" style="margin-top:20px"><a class="btn primary" href="#/manage/new">Create an event</a><a class="btn" href="#/orgs">Organizations</a></div></div>
   </div></section>
 
   <section class="sec2"><div class="head"><span class="hand-title">let's play!${SCRIBBLE}</span></div>

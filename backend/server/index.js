@@ -4,7 +4,10 @@ import cors from 'cors';
 import path from 'node:path';
 import fs from 'node:fs';
 import { config, ROOT } from './config.js';
-import './db.js';
+import { connectDb } from './db.js';
+import { startReaper } from './instances.js';
+import { requestCache } from './core.js';
+import { bootstrapAdmin } from '../scripts/bootstrap.js';
 import { HttpError, sessionMiddleware, csrfGuard } from './lib.js';
 import authRoutes from './routes/auth.js';
 import eventRoutes from './routes/events.js';
@@ -42,6 +45,7 @@ export function createApp() {
     next();
   });
 
+  app.use('/api', (_req, _res, next) => requestCache.run(new Map(), next));
   app.use('/api', express.json({ limit: '200kb' }), sessionMiddleware, csrfGuard, (req, res, next) => { res.setHeader('Cache-Control', 'no-store'); next(); });
   app.use('/api', authRoutes, eventRoutes, teamRoutes, manageRoutes, platformRoutes);
   app.get('/api/health', (_req, res) => res.json({ ok: true }));
@@ -66,10 +70,12 @@ export function createApp() {
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === path.join(ROOT, 'server', 'index.js')) {
-  if (process.env.SEED_DEMO !== '0') { const { seed } = await import('../scripts/seed.js'); seed(); }
+  await connectDb();
+  await bootstrapAdmin();
+  startReaper();
   createApp().listen(config.port, config.host, () => {
     console.log(`CipherArena listening on ${config.baseUrl}`);
-    console.log(`Instances: ${config.instanceProvider}. Data: ${config.dataDir}`);
+    console.log(`Database: MongoDB "${config.mongoDb}". Instances: ${config.instanceProvider}.`);
     console.log(`Frontend: ${fs.existsSync(config.frontendDir) ? config.frontendDir : 'not found (API-only mode)'}`);
   });
 }

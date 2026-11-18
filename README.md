@@ -5,9 +5,10 @@ Separated into **backend** (Node.js/Express API) and **frontend** (vanilla JS SP
 ## Quick Start
 
 ```bash
-# 1. Install backend dependencies
+# 1. Install backend dependencies and configure the database
 cd backend
 npm install
+cp .env.example .env   # set MONGODB_URI and ADMIN_USERNAME / ADMIN_EMAIL / ADMIN_PASSWORD
 
 # 2. Start backend (also serves frontend by default)
 npm run dev
@@ -40,11 +41,11 @@ npx serve -l 5500 -s
 │   │   ├── routes/    # API route handlers
 │   │   ├── config.js  # Configuration
 │   │   ├── core.js    # Domain logic
-│   │   ├── db.js      # SQLite database
+│   │   ├── db.js      # MongoDB connection & helpers
 │   │   ├── index.js   # App entry point
 │   │   ├── instances.js # Docker instances
 │   │   └── lib.js     # Shared helpers
-│   ├── scripts/       # Seed scripts
+│   ├── scripts/       # Admin bootstrap
 │   ├── test/          # API tests
 │   ├── package.json
 │   └── .env.example

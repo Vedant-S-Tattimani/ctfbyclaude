@@ -1,85 +1,137 @@
 // Organizations, certificates, public profiles, platform administration.
 import { Router } from 'express';
-import { one, all, run, now, audit, tx } from '../db.js';
+import { col, findOne, find, count, insert, update, byIds, escapeRegex, now, audit } from '../db.js';
 import { bad, forbidden, notFound, str, oneOf, requireAuth, requireRole, slugify, publicUser } from '../lib.js';
 import { orgRole, phase, scoreboard, pushNotify } from '../core.js';
 
 const r = Router();
-const orgBySlug = (s) => { const o = one('SELECT * FROM orgs WHERE slug=?', s); if (!o) throw notFound('Organization not found.'); return o; };
-const orgAdmin = (o, u) => u && (u.role === 'admin' || ['owner', 'admin'].includes(orgRole(o.id, u.id)));
+const orgBySlug = async (s) => { const o = await findOne('orgs', { slug: String(s) }); if (!o) throw notFound('Organization not found.'); return o; };
+const orgAdmin = async (o, u) => !!u && (u.role === 'admin' || ['owner', 'admin'].includes(await orgRole(o.id, u.id)));
+const ORG_ROLE_ORDER = { owner: 0, admin: 1, organizer: 2, author: 3, member: 4 };
+const orgCounts = async (o, eventFilter) => ({ members: await count('org_members', { org_id: o.id }), events: await count('events', { org_id: o.id, ...eventFilter }) });
+// Category histogram of a set of solves.
+const solvesByCategory = (match) => col('solves').aggregate([
+  { $match: match },
+  { $lookup: { from: 'challenges', localField: 'challenge_id', foreignField: 'id', as: 'c' } }, { $unwind: '$c' },
+  { $group: { _id: '$c.category', n: { $sum: 1 } } }, { $sort: { n: -1 } }, { $project: { _id: 0, category: '$_id', n: 1 } },
+]).toArray();
 
 /* ---------- organizations ---------- */
-r.get('/orgs', (_req, res) => res.json({ orgs: all(`SELECT o.slug, o.name, o.kind, o.accent, o.verified, o.description,
-  (SELECT COUNT(*) FROM org_members m WHERE m.org_id=o.id) members, (SELECT COUNT(*) FROM events e WHERE e.org_id=o.id AND e.status='published' AND e.visibility<>'private') events FROM orgs o ORDER BY o.verified DESC, members DESC`) }));
-r.get('/orgs/:slug', (req, res) => {
-  const o = orgBySlug(req.params.slug); const role = req.user ? orgRole(o.id, req.user.id) : null;
-  const events = all("SELECT slug, name, visibility, starts_at, ends_at, status, is_practice FROM events WHERE org_id=? ORDER BY starts_at DESC", o.id)
-    .filter((e) => (e.status === 'published' && e.visibility !== 'private') || role || req.user?.role === 'admin').map((e) => ({ ...e, phase: phase(e) }));
-  const out = { org: { ...o, members: one('SELECT COUNT(*) n FROM org_members WHERE org_id=?', o.id).n }, events, myRole: role, canAdmin: !!orgAdmin(o, req.user) };
+r.get('/orgs', async (_req, res) => {
+  const orgs = await Promise.all((await find('orgs')).map(async (o) => ({
+    slug: o.slug, name: o.name, kind: o.kind, accent: o.accent, verified: o.verified, description: o.description,
+    ...await orgCounts(o, { status: 'published', visibility: { $ne: 'private' } }),
+  })));
+  res.json({ orgs: orgs.sort((a, b) => b.verified - a.verified || b.members - a.members) });
+});
+r.get('/orgs/:slug', async (req, res) => {
+  const o = await orgBySlug(req.params.slug); const role = req.user ? await orgRole(o.id, req.user.id) : null;
+  const all = await find('events', { org_id: o.id }, { projection: { id: 1, slug: 1, name: 1, visibility: 1, starts_at: 1, ends_at: 1, status: 1, is_practice: 1 }, sort: { starts_at: -1 } });
+  const events = all.filter((e) => (e.status === 'published' && e.visibility !== 'private') || role || req.user?.role === 'admin').map(({ id: _id, ...e }) => ({ ...e, phase: phase(e) }));
+  const out = { org: { ...o, members: await count('org_members', { org_id: o.id }) }, events, myRole: role, canAdmin: await orgAdmin(o, req.user) };
   if (out.canAdmin) {
-    out.membersList = all('SELECT u.id, u.username, u.display_name, u.last_seen, m.role, m.created_at FROM org_members m JOIN users u ON u.id=m.user_id WHERE m.org_id=? ORDER BY CASE m.role WHEN \'owner\' THEN 0 WHEN \'admin\' THEN 1 WHEN \'organizer\' THEN 2 WHEN \'author\' THEN 3 ELSE 4 END, u.username', o.id);
-    const ids = all('SELECT id FROM events WHERE org_id=?', o.id).map((x) => x.id);
-    out.stats = { participants: ids.length ? one(`SELECT COUNT(DISTINCT m.user_id) n FROM registrations r JOIN team_members m ON m.team_id=r.team_id WHERE r.event_id IN (${ids.join(',')}) AND r.status='approved'`).n : 0,
-      solves: ids.length ? one(`SELECT COUNT(*) n FROM solves WHERE event_id IN (${ids.join(',')})`).n : 0,
-      byEvent: ids.map((id) => { const e = one('SELECT name FROM events WHERE id=?', id); return { name: e.name, teams: one("SELECT COUNT(*) n FROM registrations WHERE event_id=? AND status='approved'", id).n }; }) };
+    const memberships = await find('org_members', { org_id: o.id });
+    const users = await byIds('users', memberships.map((m) => m.user_id), { username: 1, display_name: 1, last_seen: 1 });
+    out.membersList = memberships.filter((m) => users.has(m.user_id)).map((m) => ({ ...users.get(m.user_id), role: m.role, created_at: m.created_at }))
+      .sort((a, b) => ORG_ROLE_ORDER[a.role] - ORG_ROLE_ORDER[b.role] || a.username.localeCompare(b.username));
+    const ids = all.map((e) => e.id);
+    const regs = await find('registrations', { event_id: { $in: ids }, status: 'approved' }, { projection: { event_id: 1, team_id: 1 } });
+    out.stats = {
+      participants: (await col('team_members').distinct('user_id', { team_id: { $in: regs.map((x) => x.team_id) } })).length,
+      solves: await count('solves', { event_id: { $in: ids } }),
+      byEvent: all.map((e) => ({ name: e.name, teams: regs.filter((x) => x.event_id === e.id).length })),
+    };
   }
   res.json(out);
 });
-r.post('/orgs', requireAuth, (req, res) => {
+r.post('/orgs', requireAuth, async (req, res) => {
   if (!req.user.email_verified) throw forbidden('Verify your email before creating an organization.');
   const name = str(req.body.name, { name: 'Name', required: true, min: 3, max: 80 }); const slug = slugify(req.body.slug || name);
-  if (!slug || one('SELECT 1 FROM orgs WHERE slug=?', slug)) throw bad('That organization URL is taken.');
-  const id = tx(() => { const id = run('INSERT INTO orgs (slug,name,description,kind,created_at) VALUES (?,?,?,?,?)', slug, name, str(req.body.description, { name: 'Description', max: 1000 }), oneOf(req.body.kind, ['university', 'community', 'company', 'training'], 'Type', 'community'), now()).lastInsertRowid;
-    run("INSERT INTO org_members (org_id,user_id,role,created_at) VALUES (?,?,'owner',?)", id, req.user.id, now()); return id; })();
-  audit(req.user.id, 'org.created', `org:${slug}`, {}, { orgId: id }); res.json({ slug });
+  if (!slug || await findOne('orgs', { slug })) throw bad('That organization URL is taken.');
+  const id = await insert('orgs', { slug, name, description: str(req.body.description, { name: 'Description', max: 1000 }),
+    kind: oneOf(req.body.kind, ['university', 'community', 'company', 'training'], 'Type', 'community'), accent: '#8f1430', website: null, verified: 0, created_at: now() });
+  await col('org_members').insertOne({ org_id: id, user_id: req.user.id, role: 'owner', created_at: now() });
+  await audit(req.user.id, 'org.created', `org:${slug}`, {}, { orgId: id }); res.json({ slug });
 });
-r.patch('/orgs/:slug', requireAuth, (req, res) => {
-  const o = orgBySlug(req.params.slug); if (!orgAdmin(o, req.user)) throw forbidden();
-  const accent = str(req.body.accent, { name: 'Accent', pattern: /^#[0-9a-fA-F]{6}$/ }) || o.accent;
-  run('UPDATE orgs SET name=?, description=?, accent=?, website=? WHERE id=?', str(req.body.name ?? o.name, { name: 'Name', required: true, max: 80 }), str(req.body.description ?? o.description, { name: 'Description', max: 1000 }), accent, str(req.body.website ?? o.website, { name: 'Website', max: 200, pattern: /^https?:\/\// }), o.id);
-  audit(req.user.id, 'org.updated', `org:${o.slug}`, {}, { orgId: o.id }); res.json({ ok: true });
+r.patch('/orgs/:slug', requireAuth, async (req, res) => {
+  const o = await orgBySlug(req.params.slug); if (!await orgAdmin(o, req.user)) throw forbidden();
+  await update('orgs', { id: o.id }, {
+    name: str(req.body.name ?? o.name, { name: 'Name', required: true, max: 80 }),
+    description: str(req.body.description ?? o.description, { name: 'Description', max: 1000 }),
+    accent: str(req.body.accent, { name: 'Accent', pattern: /^#[0-9a-fA-F]{6}$/ }) || o.accent,
+    website: str(req.body.website ?? o.website, { name: 'Website', max: 200, pattern: /^https?:\/\// }),
+  });
+  await audit(req.user.id, 'org.updated', `org:${o.slug}`, {}, { orgId: o.id }); res.json({ ok: true });
 });
-r.post('/orgs/:slug/members', requireAuth, (req, res) => {
-  const o = orgBySlug(req.params.slug); if (!orgAdmin(o, req.user)) throw forbidden();
-  const u = one('SELECT id, username FROM users WHERE username=?', str(req.body.username, { name: 'Username', required: true, max: 40 })); if (!u) throw bad('No user with that username.');
+r.post('/orgs/:slug/members', requireAuth, async (req, res) => {
+  const o = await orgBySlug(req.params.slug); if (!await orgAdmin(o, req.user)) throw forbidden();
+  const u = await findOne('users', { username: str(req.body.username, { name: 'Username', required: true, max: 40 }) }, { projection: { id: 1, username: 1 } });
+  if (!u) throw bad('No user with that username.');
   const role = oneOf(req.body.role, ['admin', 'organizer', 'author', 'member'], 'Role', 'member');
-  if (orgRole(o.id, u.id)) throw bad(`${u.username} is already a member.`);
-  run('INSERT INTO org_members (org_id,user_id,role,created_at) VALUES (?,?,?,?)', o.id, u.id, role, now());
-  pushNotify(u.id, 'org', `You joined ${o.name} as ${role}`, '', `#/orgs/${o.slug}`); audit(req.user.id, 'org.member_added', `user:${u.id}`, { role }, { orgId: o.id }); res.json({ ok: true });
+  if (await orgRole(o.id, u.id)) throw bad(`${u.username} is already a member.`);
+  await col('org_members').insertOne({ org_id: o.id, user_id: u.id, role, created_at: now() });
+  await pushNotify(u.id, 'org', `You joined ${o.name} as ${role}`, '', `#/orgs/${o.slug}`); await audit(req.user.id, 'org.member_added', `user:${u.id}`, { role }, { orgId: o.id });
+  res.json({ ok: true });
 });
-r.patch('/orgs/:slug/members/:uid', requireAuth, (req, res) => {
-  const o = orgBySlug(req.params.slug); if (!orgAdmin(o, req.user)) throw forbidden(); const uid = Number(req.params.uid);
-  if (orgRole(o.id, uid) === 'owner') throw bad("The owner's role can't be changed.");
+r.patch('/orgs/:slug/members/:uid', requireAuth, async (req, res) => {
+  const o = await orgBySlug(req.params.slug); if (!await orgAdmin(o, req.user)) throw forbidden(); const uid = Number(req.params.uid);
+  if (await orgRole(o.id, uid) === 'owner') throw bad("The owner's role can't be changed.");
   const role = oneOf(req.body.role, ['admin', 'organizer', 'author', 'member'], 'Role');
-  run('UPDATE org_members SET role=? WHERE org_id=? AND user_id=?', role, o.id, uid); audit(req.user.id, 'org.role_changed', `user:${uid}`, { role }, { orgId: o.id }); res.json({ ok: true });
+  await update('org_members', { org_id: o.id, user_id: uid }, { role }); await audit(req.user.id, 'org.role_changed', `user:${uid}`, { role }, { orgId: o.id });
+  res.json({ ok: true });
 });
-r.delete('/orgs/:slug/members/:uid', requireAuth, (req, res) => {
-  const o = orgBySlug(req.params.slug); const uid = Number(req.params.uid);
-  if (uid !== req.user.id && !orgAdmin(o, req.user)) throw forbidden(); if (orgRole(o.id, uid) === 'owner') throw bad('The owner cannot be removed.');
-  run('DELETE FROM org_members WHERE org_id=? AND user_id=?', o.id, uid); audit(req.user.id, 'org.member_removed', `user:${uid}`, {}, { orgId: o.id }); res.json({ ok: true });
+r.delete('/orgs/:slug/members/:uid', requireAuth, async (req, res) => {
+  const o = await orgBySlug(req.params.slug); const uid = Number(req.params.uid);
+  if (uid !== req.user.id && !await orgAdmin(o, req.user)) throw forbidden();
+  if (await orgRole(o.id, uid) === 'owner') throw bad('The owner cannot be removed.');
+  await col('org_members').deleteOne({ org_id: o.id, user_id: uid }); await audit(req.user.id, 'org.member_removed', `user:${uid}`, {}, { orgId: o.id });
+  res.json({ ok: true });
 });
 
 /* ---------- people & certificates ---------- */
-r.get('/users/:username', (req, res) => {
-  const u = one("SELECT * FROM users WHERE username=? AND status='active'", req.params.username); if (!u) throw notFound('User not found.');
-  res.json({ user: publicUser(u), solves: one('SELECT COUNT(*) n FROM solves WHERE user_id=?', u.id).n,
-    byCategory: all('SELECT c.category, COUNT(*) n FROM solves s JOIN challenges c ON c.id=s.challenge_id WHERE s.user_id=? GROUP BY c.category ORDER BY n DESC', u.id),
-    teams: all('SELECT t.name, t.slug, m.role FROM team_members m JOIN teams t ON t.id=m.team_id WHERE m.user_id=? AND t.is_solo=0', u.id),
-    recent: all('SELECT s.created_at, c.name, c.category, e.name AS event FROM solves s JOIN challenges c ON c.id=s.challenge_id JOIN events e ON e.id=s.event_id WHERE s.user_id=? AND e.visibility<>\'private\' ORDER BY s.id DESC LIMIT 10', u.id) });
+r.get('/users/:username', async (req, res) => {
+  const u = await findOne('users', { username: String(req.params.username), status: 'active' }); if (!u) throw notFound('User not found.');
+  const memberships = await find('team_members', { user_id: u.id });
+  const teams = await find('teams', { id: { $in: memberships.map((m) => m.team_id) }, is_solo: 0 }, { projection: { id: 1, name: 1, slug: 1 } });
+  const publicEvents = await find('events', { visibility: { $ne: 'private' } }, { projection: { id: 1, name: 1 } });
+  const evName = new Map(publicEvents.map((e) => [e.id, e.name]));
+  const recentSolves = await find('solves', { user_id: u.id, event_id: { $in: [...evName.keys()] } }, { sort: { id: -1 }, limit: 10 });
+  const chals = await byIds('challenges', recentSolves.map((s) => s.challenge_id), { name: 1, category: 1 });
+  res.json({
+    user: publicUser(u), solves: await count('solves', { user_id: u.id }), byCategory: await solvesByCategory({ user_id: u.id }),
+    teams: teams.map((t) => ({ name: t.name, slug: t.slug, role: memberships.find((m) => m.team_id === t.id).role })),
+    recent: recentSolves.filter((s) => chals.has(s.challenge_id)).map((s) => ({ created_at: s.created_at, name: chals.get(s.challenge_id).name, category: chals.get(s.challenge_id).category, event: evName.get(s.event_id) })),
+  });
 });
-const certOut = (c) => ({ code: c.code, kind: c.kind, rank: c.rank, total: c.total, points: c.points, issuedAt: c.issued_at, event: c.event, eventSlug: c.slug, org: c.org, team: c.team_solo ? null : c.team, recipient: c.display_name || c.username, username: c.username });
-const CERT_SQL = `SELECT c.*, e.name AS event, e.slug, o.name AS org, t.name AS team, t.is_solo AS team_solo, u.username, u.display_name FROM certificates c JOIN events e ON e.id=c.event_id LEFT JOIN orgs o ON o.id=e.org_id JOIN teams t ON t.id=c.team_id JOIN users u ON u.id=c.user_id`;
-r.get('/certificates/:code', (req, res) => { const c = one(`${CERT_SQL} WHERE c.code=?`, String(req.params.code).toUpperCase()); if (!c) throw notFound('No certificate with that ID.'); res.json({ certificate: certOut(c) }); });
-r.get('/me/certificates', requireAuth, (req, res) => res.json({ certificates: all(`${CERT_SQL} WHERE c.user_id=? ORDER BY c.issued_at DESC`, req.user.id).map(certOut) }));
+async function certificatesOut(query) {
+  const certs = await find('certificates', query, { sort: { issued_at: -1 } });
+  const [events, teams, users] = await Promise.all([byIds('events', certs.map((c) => c.event_id), { name: 1, slug: 1, org_id: 1 }), byIds('teams', certs.map((c) => c.team_id), { name: 1, is_solo: 1 }), byIds('users', certs.map((c) => c.user_id), { username: 1, display_name: 1 })]);
+  const orgs = await byIds('orgs', [...events.values()].map((e) => e.org_id), { name: 1 });
+  return certs.filter((c) => events.has(c.event_id) && users.has(c.user_id)).map((c) => {
+    const e = events.get(c.event_id), t = teams.get(c.team_id), u = users.get(c.user_id);
+    return { code: c.code, kind: c.kind, rank: c.rank, total: c.total, points: c.points, issuedAt: c.issued_at, event: e.name, eventSlug: e.slug, org: orgs.get(e.org_id)?.name || null,
+      team: t?.is_solo ? null : t?.name, recipient: u.display_name || u.username, username: u.username };
+  });
+}
+r.get('/certificates/:code', async (req, res) => {
+  const [c] = await certificatesOut({ code: String(req.params.code).toUpperCase() });
+  if (!c) throw notFound('No certificate with that ID.'); res.json({ certificate: c });
+});
+r.get('/me/certificates', requireAuth, async (req, res) => res.json({ certificates: await certificatesOut({ user_id: req.user.id }) }));
 
 /* ---------- global leaderboard (official events only; practice excluded) ---------- */
-r.get('/leaderboard', (_req, res) => {
+r.get('/leaderboard', async (_req, res) => {
   const totals = new Map();
-  for (const e of all("SELECT * FROM events WHERE status='published' AND is_practice=0 AND visibility='public'")) {
+  for (const e of await find('events', { status: 'published', is_practice: 0, visibility: 'public' })) {
     if (phase(e) === 'upcoming') continue;
-    for (const row of scoreboard(e).rows) for (const m of all('SELECT u.id, u.username, u.country FROM team_members m JOIN users u ON u.id=m.user_id WHERE m.team_id=?', row.id)) {
-      const t = totals.get(m.id) || { username: m.username, country: m.country, points: 0, events: 0, best: null };
-      t.points += Math.max(0, row.points); t.events++; t.best = t.best ? Math.min(t.best, row.rank) : row.rank; totals.set(m.id, t);
+    const { rows } = await scoreboard(e);
+    const memberships = await find('team_members', { team_id: { $in: rows.map((x) => x.id) } });
+    const users = await byIds('users', memberships.map((m) => m.user_id), { username: 1, country: 1 });
+    for (const row of rows) for (const m of memberships) {
+      if (m.team_id !== row.id || !users.has(m.user_id)) continue;
+      const u = users.get(m.user_id);
+      const t = totals.get(u.id) || { username: u.username, country: u.country, points: 0, events: 0, best: null };
+      t.points += Math.max(0, row.points); t.events++; t.best = t.best ? Math.min(t.best, row.rank) : row.rank; totals.set(u.id, t);
     }
   }
   res.json({ players: [...totals.values()].sort((a, b) => b.points - a.points).slice(0, 100).map((p, i) => ({ ...p, rank: i + 1 })) });
@@ -87,45 +139,82 @@ r.get('/leaderboard', (_req, res) => {
 
 /* ---------- platform admin ---------- */
 r.use('/admin', requireRole('admin'));
-r.get('/admin/overview', (_req, res) => {
-  const t = now(); const day = 86400_000; const series = [];
-  for (let i = 29; i >= 0; i--) { const a = Math.floor(t / day) * day - i * day; series.push({ day: a, signups: one('SELECT COUNT(*) n FROM users WHERE created_at>=? AND created_at<?', a, a + day).n, submissions: one('SELECT COUNT(*) n FROM submissions WHERE created_at>=? AND created_at<?', a, a + day).n }); }
+async function auditOut(entries) {
+  const users = await byIds('users', entries.map((a) => a.actor_id), { username: 1 });
+  return entries.map((a) => ({ ...a, meta: JSON.stringify(a.meta ?? {}), username: users.get(a.actor_id)?.username || null }));
+}
+r.get('/admin/overview', async (_req, res) => {
+  const t = now(); const day = 86400_000; const from = Math.floor(t / day) * day - 29 * day;
+  const [signups, subs] = await Promise.all([
+    find('users', { created_at: { $gte: from } }, { projection: { created_at: 1 } }),
+    find('submissions', { created_at: { $gte: from } }, { projection: { created_at: 1 } }),
+  ]);
+  const series = Array.from({ length: 30 }, (_, i) => {
+    const a = from + i * day; const inDay = (x) => x.created_at >= a && x.created_at < a + day;
+    return { day: a, signups: signups.filter(inDay).length, submissions: subs.filter(inDay).length };
+  });
+  const [users, suspended, unverified, orgs, unverifiedOrgs, events, published, openIncidents, runningInstances, twoFactorOn, recent] = await Promise.all([
+    count('users'), count('users', { status: 'suspended' }), count('users', { email_verified: 0 }), count('orgs'), count('orgs', { verified: 0 }), count('events'),
+    find('events', { status: 'published', is_practice: 0 }, { projection: { starts_at: 1, ends_at: 1, is_practice: 1 } }),
+    count('incidents', { status: { $in: ['open', 'investigating'] } }), count('instances', { status: 'running' }), count('users', { totp_enabled: 1 }),
+    find('audit_log', {}, { sort: { id: -1 }, limit: 8 }),
+  ]);
   res.json({ stats: {
-    users: one('SELECT COUNT(*) n FROM users').n, suspended: one("SELECT COUNT(*) n FROM users WHERE status='suspended'").n, unverified: one('SELECT COUNT(*) n FROM users WHERE email_verified=0').n,
-    orgs: one('SELECT COUNT(*) n FROM orgs').n, unverifiedOrgs: one('SELECT COUNT(*) n FROM orgs WHERE verified=0').n,
-    events: one('SELECT COUNT(*) n FROM events').n, live: all("SELECT * FROM events WHERE status='published' AND is_practice=0").filter((e) => phase(e) === 'live').length,
-    openIncidents: one("SELECT COUNT(*) n FROM incidents WHERE status IN ('open','investigating')").n, runningInstances: one("SELECT COUNT(*) n FROM instances WHERE status='running'").n,
-    twoFactor: one('SELECT ROUND(100.0*SUM(totp_enabled)/MAX(COUNT(*),1)) n FROM users').n,
-    failedLogins: null,
-  }, series, recentAudit: all('SELECT a.*, u.username FROM audit_log a LEFT JOIN users u ON u.id=a.actor_id ORDER BY a.id DESC LIMIT 8') });
+    users, suspended, unverified, orgs, unverifiedOrgs, events, live: published.filter((e) => phase(e) === 'live').length,
+    openIncidents, runningInstances, twoFactor: Math.round((100 * twoFactorOn) / Math.max(users, 1)), failedLogins: null,
+  }, series, recentAudit: await auditOut(recent) });
 });
-r.get('/admin/users', (req, res) => {
-  const q = `%${String(req.query.q || '')}%`; const st = req.query.status;
-  res.json({ users: all(`SELECT id, username, display_name, email, role, status, email_verified, totp_enabled, created_at, last_seen FROM users WHERE (username LIKE ? OR IFNULL(display_name,'') LIKE ? OR email LIKE ?) ${st && st !== 'all' ? 'AND status=?' : ''} ORDER BY id DESC LIMIT 200`, q, q, q, ...(st && st !== 'all' ? [st] : [])) });
+r.get('/admin/users', async (req, res) => {
+  const re = { $regex: escapeRegex(String(req.query.q || '')), $options: 'i' }; const st = req.query.status;
+  const query = { $or: [{ username: re }, { display_name: re }, { email: re }], ...(st && st !== 'all' ? { status: String(st) } : {}) };
+  res.json({ users: await find('users', query, { projection: { id: 1, username: 1, display_name: 1, email: 1, role: 1, status: 1, email_verified: 1, totp_enabled: 1, created_at: 1, last_seen: 1 }, sort: { id: -1 }, limit: 200 }) });
 });
-r.patch('/admin/users/:id', (req, res) => {
-  const u = one('SELECT * FROM users WHERE id=?', Number(req.params.id)); if (!u) throw notFound();
+r.patch('/admin/users/:id', async (req, res) => {
+  const u = await findOne('users', { id: Number(req.params.id) }); if (!u) throw notFound();
   if (u.id === req.user.id) throw bad("You can't change your own role or status here.");
   const role = oneOf(req.body.role, ['participant', 'organizer', 'admin'], 'Role', u.role); const status = oneOf(req.body.status, ['active', 'suspended'], 'Status', u.status);
-  run('UPDATE users SET role=?, status=? WHERE id=?', role, status, u.id);
-  if (status === 'suspended') run('DELETE FROM sessions WHERE user_id=?', u.id);
-  audit(req.user.id, status !== u.status ? `user.${status === 'suspended' ? 'suspended' : 'restored'}` : 'user.role_changed', `user:${u.username}`, { role, status, reason: req.body.reason || null });
+  await update('users', { id: u.id }, { role, status });
+  if (status === 'suspended') await col('sessions').deleteMany({ user_id: u.id });
+  await audit(req.user.id, status !== u.status ? `user.${status === 'suspended' ? 'suspended' : 'restored'}` : 'user.role_changed', `user:${u.username}`, { role, status, reason: req.body.reason || null });
   res.json({ ok: true });
 });
-r.get('/admin/orgs', (_req, res) => res.json({ orgs: all('SELECT o.*, (SELECT COUNT(*) FROM org_members m WHERE m.org_id=o.id) members, (SELECT COUNT(*) FROM events e WHERE e.org_id=o.id) events FROM orgs o ORDER BY o.verified, o.created_at DESC') }));
-r.patch('/admin/orgs/:slug', (req, res) => { const o = orgBySlug(req.params.slug); run('UPDATE orgs SET verified=? WHERE id=?', req.body.verified ? 1 : 0, o.id); audit(req.user.id, req.body.verified ? 'org.verified' : 'org.unverified', `org:${o.slug}`); res.json({ ok: true }); });
-r.get('/admin/events', (_req, res) => res.json({ events: all('SELECT e.slug, e.name, e.status, e.visibility, e.starts_at, e.ends_at, e.is_practice, o.name AS org, (SELECT COUNT(*) FROM registrations r WHERE r.event_id=e.id AND r.status=\'approved\') teams FROM events e LEFT JOIN orgs o ON o.id=e.org_id ORDER BY e.starts_at DESC').map((e) => ({ ...e, phase: phase(e) })) }));
-r.patch('/admin/events/:slug', (req, res) => {
-  const e = one('SELECT * FROM events WHERE slug=?', req.params.slug); if (!e) throw notFound();
+r.get('/admin/orgs', async (_req, res) => {
+  const orgs = await find('orgs', {}, { sort: { verified: 1, created_at: -1 } });
+  res.json({ orgs: await Promise.all(orgs.map(async (o) => ({ ...o, ...await orgCounts(o, {}) }))) });
+});
+r.patch('/admin/orgs/:slug', async (req, res) => {
+  const o = await orgBySlug(req.params.slug); await update('orgs', { id: o.id }, { verified: req.body.verified ? 1 : 0 });
+  await audit(req.user.id, req.body.verified ? 'org.verified' : 'org.unverified', `org:${o.slug}`); res.json({ ok: true });
+});
+r.get('/admin/events', async (_req, res) => {
+  const events = await find('events', {}, { sort: { starts_at: -1 } });
+  const orgs = await byIds('orgs', events.map((e) => e.org_id), { name: 1 });
+  res.json({ events: await Promise.all(events.map(async (e) => ({
+    slug: e.slug, name: e.name, status: e.status, visibility: e.visibility, starts_at: e.starts_at, ends_at: e.ends_at, is_practice: e.is_practice,
+    org: orgs.get(e.org_id)?.name || null, teams: await count('registrations', { event_id: e.id, status: 'approved' }), phase: phase(e),
+  }))) });
+});
+r.patch('/admin/events/:slug', async (req, res) => {
+  const e = await findOne('events', { slug: String(req.params.slug) }); if (!e) throw notFound();
   const status = oneOf(req.body.status, ['published', 'suspended', 'draft'], 'Status'); const reason = str(req.body.reason, { name: 'Reason', max: 500 });
-  run('UPDATE events SET status=? WHERE id=?', status, e.id);
-  for (const s of all('SELECT user_id FROM event_staff WHERE event_id=?', e.id)) pushNotify(s.user_id, 'platform', `${e.name} was ${status === 'suspended' ? 'suspended' : 'restored'} by platform staff`, reason || '', `#/manage/${e.slug}`);
-  audit(req.user.id, `event.${status}`, `event:${e.slug}`, { reason }, { eventId: e.id }); res.json({ ok: true });
+  await update('events', { id: e.id }, { status });
+  for (const s of await find('event_staff', { event_id: e.id })) await pushNotify(s.user_id, 'platform', `${e.name} was ${status === 'suspended' ? 'suspended' : 'restored'} by platform staff`, reason || '', `#/manage/${e.slug}`);
+  await audit(req.user.id, `event.${status}`, `event:${e.slug}`, { reason }, { eventId: e.id }); res.json({ ok: true });
 });
-r.get('/admin/audit', (req, res) => {
-  const q = `%${String(req.query.q || '')}%`;
-  res.json({ entries: all('SELECT a.*, u.username FROM audit_log a LEFT JOIN users u ON u.id=a.actor_id WHERE a.action LIKE ? OR IFNULL(a.target,\'\') LIKE ? OR IFNULL(u.username,\'\') LIKE ? ORDER BY a.id DESC LIMIT 300', q, q, q) });
+r.get('/admin/audit', async (req, res) => {
+  const q = String(req.query.q || '');
+  let query = {};
+  if (q) {
+    const re = { $regex: escapeRegex(q), $options: 'i' };
+    const actors = await find('users', { username: re }, { projection: { id: 1 } });
+    query = { $or: [{ action: re }, { target: re }, { actor_id: { $in: actors.map((u) => u.id) } }] };
+  }
+  res.json({ entries: await auditOut(await find('audit_log', query, { sort: { id: -1 }, limit: 300 })) });
 });
-r.get('/admin/incidents', (_req, res) => res.json({ incidents: all("SELECT i.id, i.kind, i.severity, i.title, i.status, i.created_at, e.name AS event, e.slug FROM incidents i JOIN events e ON e.id=i.event_id ORDER BY i.id DESC LIMIT 100") }));
+r.get('/admin/incidents', async (_req, res) => {
+  const list = await find('incidents', {}, { projection: { id: 1, kind: 1, severity: 1, title: 1, status: 1, created_at: 1, event_id: 1 }, sort: { id: -1 }, limit: 100 });
+  const events = await byIds('events', list.map((i) => i.event_id), { name: 1, slug: 1 });
+  res.json({ incidents: list.filter((i) => events.has(i.event_id)).map(({ event_id: eid, ...i }) => ({ ...i, event: events.get(eid).name, slug: events.get(eid).slug })) });
+});
 
 export default r;

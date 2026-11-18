@@ -60,7 +60,11 @@ export const onForm = (n, f) => { forms[n] = f; };
 export const onChange = (n, f) => { changes[n] = f; };
 document.addEventListener('click', async (e) => {
   const el = e.target.closest('[data-act]');
-  if (!el) { if (!e.target.closest('.pop') && !e.target.closest('[data-pop]')) closePops(); return; }
+  if (!el) {
+    if (!e.target.closest('.pop') && !e.target.closest('[data-pop]')) closePops();
+    if (!e.target.closest('.side')) document.querySelector('.side.open')?.classList.remove('open');
+    return;
+  }
   const f = acts[el.dataset.act]; if (!f) return;
   e.preventDefault();
   try { await f(el, e); } catch (err) { toast(err.message, 'err'); }
@@ -117,7 +121,7 @@ function arenaSide(c) {
     <div class="grp label">You</div>${sideLink('/dashboard', 'Dashboard', false)}${sideLink('/teams', 'Teams', false)}
     ${a?.team ? `<div class="foot"><div class="label">${esc(a.team.name || 'Solo')}</div><div class="row between" style="margin-top:8px"><span class="dim small">Rank</span><span class="mono">#${a.team.rank} / ${a.team.of}</span></div><div class="row between"><span class="dim small">Points</span><span class="mono">${a.team.points}</span></div><div class="row between"><span class="dim small">Solved</span><span class="mono">${a.team.solved}</span></div></div>` : ''}`;
 }
-function footer() { return `<footer class="footer"><span>fs0cie<b>1y</b> · capture the flag platform · <span data-clock></span></span><span class="row" style="gap:18px"><a href="#/verify">Verify certificate</a><a href="#/orgs">Organizations</a><a href="#/events">Competitions</a><a href="#/manage/new">Host an event</a></span></footer>${rulerHtml(true)}`; }
+function footer() { return `<footer class="footer"><span>fs0cie<b>1y</b> · capture the flag platform · <span data-clock></span></span><span class="row wrap" style="gap:10px 18px"><a href="#/verify">Verify certificate</a><a href="#/orgs">Organizations</a><a href="#/events">Competitions</a><a href="#/manage/new">Host an event</a></span></footer>${rulerHtml(true)}`; }
 const floatCta = (me) => `<a class="float-cta" href="#/${me && me.role !== 'participant' ? 'manage/new' : 'events'}">${icon('heart', 14)}${me && me.role !== 'participant' ? 'Host an event' : 'Find a CTF'}</a>`;
 function shellFor(c, html) {
   const sh = c.r.shell || 'public';

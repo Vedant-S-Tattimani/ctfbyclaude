@@ -2,7 +2,7 @@
 import crypto from 'node:crypto';
 import bcrypt from 'bcryptjs';
 import { config } from './config.js';
-import { one, run, now } from './db.js';
+import { col, findOne, update, now } from './db.js';
 
 export class HttpError extends Error {
   constructor(status, message, extra = {}) { super(message); this.status = status; this.extra = extra; }
@@ -92,28 +92,30 @@ export const COOKIE = 'ca_session';
 export function parseCookies(header = '') {
   const o = {}; for (const part of header.split(';')) { const i = part.indexOf('='); if (i > 0) o[part.slice(0, i).trim()] = decodeURIComponent(part.slice(i + 1).trim()); } return o;
 }
-export function createSession(res, req, userId, pending2fa = false) {
+export async function createSession(res, req, userId, pending2fa = false) {
   const token = randomToken();
   const exp = now() + config.sessionDays * 86400_000;
-  run('INSERT INTO sessions (token_hash,user_id,pending_2fa,ip,ua,created_at,expires_at,last_used) VALUES (?,?,?,?,?,?,?,?)',
-    sha256(token), userId, pending2fa ? 1 : 0, req.ip, String(req.headers['user-agent'] || '').slice(0, 200), now(), exp, now());
+  await col('sessions').insertOne({ token_hash: sha256(token), user_id: userId, pending_2fa: pending2fa ? 1 : 0, ip: req.ip,
+    ua: String(req.headers['user-agent'] || '').slice(0, 200), created_at: now(), expires_at: exp, expire_at: new Date(exp), last_used: now() });
   res.setHeader('Set-Cookie', `${COOKIE}=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${config.sessionDays * 86400}${config.cookieSecure ? '; Secure' : ''}`);
   return token;
 }
 export function clearSessionCookie(res) { res.setHeader('Set-Cookie', `${COOKIE}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0`); }
 
 // Attaches req.user (full session) or req.pendingUser (password ok, 2FA outstanding).
-export function sessionMiddleware(req, _res, next) {
+export async function sessionMiddleware(req, _res, next) {
   const token = parseCookies(req.headers.cookie)[COOKIE];
   req.user = null; req.pendingUser = null;
   if (token) {
-    const s = one('SELECT * FROM sessions WHERE token_hash = ?', sha256(token));
+    const s = await findOne('sessions', { token_hash: sha256(token) });
     if (s && s.expires_at > now()) {
-      const u = one('SELECT * FROM users WHERE id = ?', s.user_id);
+      const u = await findOne('users', { id: s.user_id });
       if (u && u.status === 'active') {
         req.sessionHash = s.token_hash;
         if (s.pending_2fa) req.pendingUser = u; else req.user = u;
-        if (!s.last_used || now() - s.last_used > 60_000) { run('UPDATE sessions SET last_used=? WHERE token_hash=?', now(), s.token_hash); run('UPDATE users SET last_seen=? WHERE id=?', now(), u.id); }
+        if (!s.last_used || now() - s.last_used > 60_000) {
+          await Promise.all([update('sessions', { token_hash: s.token_hash }, { last_used: now() }), update('users', { id: u.id }, { last_seen: now() })]);
+        }
       }
     }
   }
@@ -137,7 +139,7 @@ export function publicUser(u) {
   return { id: u.id, username: u.username, displayName: u.display_name, role: u.role, country: u.country, bio: u.bio, experience: u.experience, createdAt: u.created_at };
 }
 export function selfUser(u) {
-  return { ...publicUser(u), email: u.email, emailVerified: !!u.email_verified, totpEnabled: !!u.totp_enabled, interests: JSON.parse(u.interests || '[]'), language: u.language, onboarded: !!u.onboarded, status: u.status };
+  return { ...publicUser(u), email: u.email, emailVerified: !!u.email_verified, totpEnabled: !!u.totp_enabled, interests: u.interests || [], language: u.language, onboarded: !!u.onboarded, status: u.status };
 }
 export function maskFlag(v) {
   const s = String(v); const m = s.match(/^([^{]{0,20}\{)(.*)(\})$/s);
