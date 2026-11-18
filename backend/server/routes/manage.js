@@ -11,6 +11,7 @@ import {
   CATEGORY_IDS, eventBySlug, phase, staffRole, canManage, canAuthor, canModerate, orgRole, scoreboard, dynamicFlag, setStaticFlag, checkFlag,
   hub, pushNotify, notifyTeam, memberIds, teamIdsOf,
 } from '../core.js';
+import { syncEventStaffToFirebase, removeEventStaffFromFirebase } from '../firebase.js';
 
 const r = Router();
 r.use('/manage', requireAuth);
@@ -91,6 +92,8 @@ r.post('/manage/events', async (req, res) => {
     status: 'draft', accepting: 1, created_at: now(), updated_at: now() });
   await col('event_staff').insertOne({ event_id: id, user_id: u.id, role: 'owner' });
   await audit(u.id, 'event.created', `event:${slug}`, {}, { eventId: id, orgId });
+  // Sync event owner staff to Firebase
+  syncEventStaffToFirebase(id, u.id, 'owner', slug).catch(() => {});
   res.json({ slug });
 });
 async function checklist(e) {
@@ -172,12 +175,15 @@ r.post('/manage/events/:slug/staff', async (req, res) => {
   if (await findOne('registrations', { event_id: e.id, team_id: { $in: await teamIdsOf(u.id) } })) throw bad('That person is registered as a competitor in this event.');
   if ((await findOne('event_staff', { event_id: e.id, user_id: u.id }))?.role === 'owner') throw bad('The event owner keeps the owner role.');
   await col('event_staff').updateOne({ event_id: e.id, user_id: u.id }, { $set: { role } }, { upsert: true });
+  syncEventStaffToFirebase(e.id, u.id, role, e.slug).catch(() => {});
   await pushNotify(u.id, 'staff', `You were added as ${role} on ${e.name}`, '', `#/manage/${e.slug}`); res.json({ ok: true });
 });
 r.delete('/manage/events/:slug/staff/:uid', async (req, res) => {
   const e = await ev(req, canManage); const target = Number(req.params.uid);
   if ((await findOne('event_staff', { event_id: e.id, user_id: target }))?.role === 'owner') throw bad('The event owner cannot be removed.');
-  await col('event_staff').deleteOne({ event_id: e.id, user_id: target }); res.json({ ok: true });
+  await col('event_staff').deleteOne({ event_id: e.id, user_id: target });
+  removeEventStaffFromFirebase(e.id, target).catch(() => {});
+  res.json({ ok: true });
 });
 
 /* ---------- challenges ---------- */

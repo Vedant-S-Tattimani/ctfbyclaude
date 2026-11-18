@@ -7,6 +7,7 @@ import {
   createSession, clearSessionCookie, requireAuth, rateHit, verifyTotp, newTotpSecret, selfUser, oneOf,
 } from '../lib.js';
 import { hub, eventBySlug, canModerate, scoreboard, CATEGORY_IDS, phase, assertCanView, teamIdsOf } from '../core.js';
+import { syncUserToFirebase } from '../firebase.js';
 
 const r = Router();
 const devLink = (path) => (config.exposeDevLinks ? `${config.baseUrl}/${path}` : undefined);
@@ -44,9 +45,10 @@ r.post('/auth/signup', async (req, res) => {
     totp_secret: null, totp_enabled: 0, experience: null, interests: [], language: 'en', country: null, bio: null, onboarded: 0, created_at: now(), last_seen: null,
   });
   const t = await issueEmailToken(id, 'verify', 48);
-  await createSession(res, req, id);
+  const token = await createSession(res, req, id);
   await audit(id, 'user.signup', `user:${id}`, {}, { ip: req.ip });
-  res.json({ ok: true, devLink: devLink(`#/verify-email?token=${t}`) });
+  const newUser = await findOne('users', { id });
+  res.json({ ok: true, token, user: selfUser(newUser), devLink: devLink(`#/verify-email?token=${t}`) });
 });
 
 r.post('/auth/login', async (req, res) => {
@@ -55,9 +57,11 @@ r.post('/auth/login', async (req, res) => {
   const u = await findOne('users', { $or: [{ username: login }, { email: login }] });
   if (!u || !checkPassword(String(req.body.password || ''), u.password_hash)) throw new HttpError(401, 'Incorrect username or password.');
   if (u.status !== 'active') throw new HttpError(403, 'This account is suspended. Contact support to appeal.');
-  await createSession(res, req, u.id, !!u.totp_enabled);
+  const token = await createSession(res, req, u.id, !!u.totp_enabled);
   await audit(u.id, 'user.login', `user:${u.id}`, { twoFactor: !!u.totp_enabled }, { ip: req.ip });
-  res.json({ ok: true, twoFactor: !!u.totp_enabled });
+  // Sync admin/organiser profiles to Firebase on login
+  syncUserToFirebase(u).catch(() => {});
+  res.json({ ok: true, twoFactor: !!u.totp_enabled, token, user: selfUser(u) });
 });
 
 r.post('/auth/2fa', async (req, res) => {

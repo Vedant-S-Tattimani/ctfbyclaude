@@ -8,7 +8,13 @@ import { enhance } from './fx.js';
 const API_BASE = (window.__CA_CONFIG__?.apiBase || '').replace(/\/$/, '');
 
 export async function api(path, { method = 'GET', body, form } = {}) {
-  const opts = { method, headers: { 'X-CA-CSRF': '1' }, credentials: API_BASE ? 'include' : 'same-origin' };
+  const token = sessionStorage.getItem('ca_token') || localStorage.getItem('ca_token');
+  const headers = { 'X-CA-CSRF': '1' };
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+    headers['X-CA-Token'] = token;
+  }
+  const opts = { method, headers, credentials: 'include' };
   if (form) opts.body = form; else if (body !== undefined) { opts.headers['Content-Type'] = 'application/json'; opts.body = JSON.stringify(body); }
   let res;
   try { res = await fetch(`${API_BASE}/api${path}`, opts); } catch { throw Object.assign(new Error('Could not reach the server. Check your connection and try again.'), { status: 0 }); }
@@ -16,8 +22,23 @@ export async function api(path, { method = 'GET', body, form } = {}) {
   if (!res.ok && !(res.status === 429 && data.result)) throw Object.assign(new Error(data.error || `Request failed (${res.status}).`), { status: res.status, data });
   return data;
 }
-export const state = { me: null, pending2fa: false, unread: 0 };
-export async function loadMe() { const r = await api('/auth/me'); state.me = r.user; state.pending2fa = r.pending2fa; state.unread = r.user?.unread || 0; return r.user; }
+let initialUser = null;
+try {
+  const raw = localStorage.getItem('ca_user');
+  if (raw) initialUser = JSON.parse(raw);
+} catch {}
+
+export const state = { me: initialUser, pending2fa: false, unread: 0 };
+export async function loadMe() {
+  const r = await api('/auth/me');
+  if (r && r.user) {
+    state.me = r.user;
+    state.unread = r.user.unread || 0;
+    try { localStorage.setItem('ca_user', JSON.stringify(r.user)); } catch {}
+  }
+  state.pending2fa = !!r?.pending2fa;
+  return r?.user || state.me;
+}
 
 /* ---------- router ---------- */
 const routes = [];
@@ -151,7 +172,16 @@ onAct('usermenu', (el) => {
     ${me.role !== 'participant' ? '<a class="item" href="#/manage">Organizer workspace</a>' : ''}${me.role === 'admin' ? '<a class="item" href="#/admin">Platform admin</a>' : ''}
     <button class="item" data-act="logout">Sign out</button>`);
 });
-onAct('logout', async () => { await api('/auth/logout', { method: 'POST' }); state.me = null; closePops(); toast('Signed out'); go('/'); });
+onAct('logout', async () => {
+  sessionStorage.removeItem('ca_token');
+  localStorage.removeItem('ca_token');
+  localStorage.removeItem('ca_user');
+  await api('/auth/logout', { method: 'POST' });
+  state.me = null;
+  closePops();
+  toast('Signed out');
+  go('/');
+});
 
 /* ---------- realtime ---------- */
 let es = null, esKey = null; export const streamHandlers = new Set();

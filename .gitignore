@@ -7,5 +7,7 @@ backend/data/
 backend/.env
 frontend/.env
 *.log
+*serviceAccountKey*.json
+backend/serviceAccountKey.json
 
 .claude/worktrees/

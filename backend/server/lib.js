@@ -90,7 +90,17 @@ export const newTotpSecret = () => base32Encode(crypto.randomBytes(20));
 /* ---------- sessions ---------- */
 export const COOKIE = 'ca_session';
 export function parseCookies(header = '') {
-  const o = {}; for (const part of header.split(';')) { const i = part.indexOf('='); if (i > 0) o[part.slice(0, i).trim()] = decodeURIComponent(part.slice(i + 1).trim()); } return o;
+  const o = {};
+  if (!header) return o;
+  for (const part of header.split(';')) {
+    const i = part.indexOf('=');
+    if (i > 0) {
+      const k = part.slice(0, i).trim();
+      const raw = part.slice(i + 1).trim();
+      try { o[k] = decodeURIComponent(raw); } catch { o[k] = raw; }
+    }
+  }
+  return o;
 }
 export async function createSession(res, req, userId, pending2fa = false) {
   const token = randomToken();
@@ -104,7 +114,9 @@ export function clearSessionCookie(res) { res.setHeader('Set-Cookie', `${COOKIE}
 
 // Attaches req.user (full session) or req.pendingUser (password ok, 2FA outstanding).
 export async function sessionMiddleware(req, _res, next) {
-  const token = parseCookies(req.headers.cookie)[COOKIE];
+  const authHeader = req.headers.authorization;
+  const bearerToken = authHeader && authHeader.startsWith('Bearer ') ? authHeader.slice(7).trim() : null;
+  const token = parseCookies(req.headers.cookie)[COOKIE] || req.headers['x-ca-token'] || bearerToken;
   req.user = null; req.pendingUser = null;
   if (token) {
     const s = await findOne('sessions', { token_hash: sha256(token) });
