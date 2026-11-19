@@ -57,6 +57,11 @@ export function getFirebaseDb() {
   return db;
 }
 
+/** The initialised Firebase Admin app (or null), used for Firebase Authentication in identity.js. */
+export function getFirebaseApp() {
+  return firebaseApp;
+}
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function ref(path) {

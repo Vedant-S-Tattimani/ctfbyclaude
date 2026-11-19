@@ -1,7 +1,7 @@
 {
   "name": "cipherarena-backend",
   "version": "1.0.0",
-  "description": "CipherArena \u2014 CTF hosting, management and competition platform (backend API)",
+  "description": "CipherArena — CTF hosting, management and competition platform (backend API)",
   "private": true,
   "type": "module",
   "main": "server/index.js",
@@ -14,10 +14,10 @@
     "bootstrap": "node scripts/bootstrap.js",
     "verify": "node scripts/verify-setup.js",
     "test": "node --test --test-concurrency=1 test/*.test.js",
-    "seed:practice": "node scripts/seed-practice.js"
+    "seed:practice": "node scripts/seed-practice.js",
+    "migrate:auth": "node scripts/migrate-auth-to-firebase.js"
   },
   "dependencies": {
-    "bcryptjs": "^3.0.3",
     "cors": "^2.8.5",
     "express": "^5.3.0",
     "firebase-admin": "^14.5.1",

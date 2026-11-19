@@ -1,8 +1,8 @@
-// Shared helpers: errors, validation, hashing, rate limiting, TOTP, sessions, auth middleware.
+// Shared helpers: errors, validation, hashing, rate limiting, TOTP, session cookie, auth middleware.
 import crypto from 'node:crypto';
-import bcrypt from 'bcryptjs';
 import { config } from './config.js';
-import { col, findOne, update, now } from './db.js';
+import { findOne, update, now } from './db.js';
+import { verifySessionCookie } from './identity.js';
 
 export class HttpError extends Error {
   constructor(status, message, extra = {}) { super(message); this.status = status; this.extra = extra; }
@@ -19,9 +19,6 @@ export const randomCode = (len = 10) => {
   return s;
 };
 export const slugify = (s) => String(s).toLowerCase().normalize('NFKD').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 60);
-export const hashPassword = (p) => bcrypt.hashSync(p, 11);
-// Accounts created through OAuth have no password hash until the user sets one.
-export const checkPassword = (p, h) => (typeof h === 'string' && h ? bcrypt.compareSync(p, h) : false);
 export const safeEqual = (a, b) => { const A = Buffer.from(String(a)), B = Buffer.from(String(b)); return A.length === B.length && crypto.timingSafeEqual(A, B); };
 
 /* ---------- validation ---------- */
@@ -103,33 +100,23 @@ export function parseCookies(header = '') {
   }
   return o;
 }
-export async function createSession(res, req, userId, pending2fa = false) {
-  const token = randomToken();
-  const exp = now() + config.sessionDays * 86400_000;
-  await col('sessions').insertOne({ token_hash: sha256(token), user_id: userId, pending_2fa: pending2fa ? 1 : 0, ip: req.ip,
-    ua: String(req.headers['user-agent'] || '').slice(0, 200), created_at: now(), expires_at: exp, expire_at: new Date(exp), last_used: now() });
-  res.setHeader('Set-Cookie', `${COOKIE}=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${config.sessionDays * 86400}${config.cookieSecure ? '; Secure' : ''}`);
-  return token;
+// The session is a Firebase session cookie, kept only in this HttpOnly cookie: page scripts can't read it, and it is
+// never returned in a response body or accepted from a header.
+export function setSessionCookie(res, cookie, maxAgeSeconds) {
+  res.append('Set-Cookie', `${COOKIE}=${cookie}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${maxAgeSeconds}${config.cookieSecure ? '; Secure' : ''}`);
 }
-export function clearSessionCookie(res) { res.setHeader('Set-Cookie', `${COOKIE}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0`); }
+export function clearSessionCookie(res) { res.append('Set-Cookie', `${COOKIE}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0`); }
 
-// Attaches req.user (full session) or req.pendingUser (password ok, 2FA outstanding).
+// Attaches req.user: the MongoDB profile of the Firebase account behind a valid session cookie.
+const LAST_SEEN_EVERY_MS = 60_000;
 export async function sessionMiddleware(req, _res, next) {
-  // Sessions come only from the HttpOnly cookie. Never accept the token from a header or return it in a body:
-  // anything page scripts can read, an injected script could steal.
-  const token = parseCookies(req.headers.cookie)[COOKIE];
-  req.user = null; req.pendingUser = null;
-  if (token) {
-    const s = await findOne('sessions', { token_hash: sha256(token) });
-    if (s && s.expires_at > now()) {
-      const u = await findOne('users', { id: s.user_id });
-      if (u && u.status === 'active') {
-        req.sessionHash = s.token_hash;
-        if (s.pending_2fa) req.pendingUser = u; else req.user = u;
-        if (!s.last_used || now() - s.last_used > 60_000) {
-          await Promise.all([update('sessions', { token_hash: s.token_hash }, { last_used: now() }), update('users', { id: u.id }, { last_seen: now() })]);
-        }
-      }
+  req.user = null;
+  const uid = await verifySessionCookie(parseCookies(req.headers.cookie)[COOKIE]);
+  if (uid) {
+    const u = await findOne('users', { firebase_uid: uid });
+    if (u && u.status === 'active') {
+      req.user = u;
+      if (!u.last_seen || now() - u.last_seen > LAST_SEEN_EVERY_MS) await update('users', { id: u.id }, { last_seen: now() });
     }
   }
   next();
@@ -152,7 +139,7 @@ export function publicUser(u) {
   return { id: u.id, username: u.username, displayName: u.display_name, role: u.role, country: u.country, bio: u.bio, experience: u.experience, createdAt: u.created_at };
 }
 export function selfUser(u) {
-  return { ...publicUser(u), email: u.email, emailVerified: !!u.email_verified, hasPassword: !!u.password_hash, totpEnabled: !!u.totp_enabled, interests: u.interests || [], language: u.language, onboarded: !!u.onboarded, status: u.status };
+  return { ...publicUser(u), email: u.email, emailVerified: !!u.email_verified, totpEnabled: !!u.totp_enabled, interests: u.interests || [], language: u.language, onboarded: !!u.onboarded, status: u.status };
 }
 export function maskFlag(v) {
   const s = String(v); const m = s.match(/^([^{]{0,20}\{)(.*)(\})$/s);

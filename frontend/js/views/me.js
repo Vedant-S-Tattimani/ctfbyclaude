@@ -1,6 +1,7 @@
 // Signed-in participant pages: dashboard, teams, certificates, settings & security.
 import { api, route, state, go, refresh, loadMe, onAct, onForm } from '../core.js';
 import { esc, fmt, icon, tag, phaseTag, dateFmt, dtFmt, ago, av, catName, catCode, dialog, confirmDlg, toast, copy, areaChart, hbars, MARK } from '../ui.js';
+import { changePassword, linkMethod, unlinkMethod, sendPasswordReset, signOutEverywhere } from '../firebase-auth.js';
 
 const A = { shell: 'app', auth: true };
 
@@ -94,16 +95,8 @@ route('/certificates', { ...A, title: 'Certificates', view: async () => {
 
 /* ---------- settings ---------- */
 let STAB = 'profile';
-const SEEN = new Set();
-route('/settings', { ...A, title: 'Settings', view: async ({ query }) => {
+route('/settings', { ...A, title: 'Settings', view: async () => {
   const me = state.me; let body = '';
-  // Back from a GitHub/Google link round-trip: open the Security tab and say how it went (once per URL).
-  let oauthNote = '';
-  if (query.tab === 'security' && (query.oauth || query.oauth_error) && !SEEN.has(location.hash)) {
-    SEEN.add(location.hash); STAB = 'security';
-    oauthNote = query.oauth_error ? `<div class="notice err">${icon('x')}<div>${esc(query.oauth_error)}</div></div>`
-      : `<div class="notice ok">${icon('check')}<div>Account linked. You can now sign in with it.</div></div>`;
-  }
   if (STAB === 'profile') body = `<form class="stack" data-form="profile" style="max-width:560px" novalidate>
     <div class="field"><label for="p1">Username</label><input id="p1" class="input mono" name="username" value="${esc(me.username)}" required></div>
     <div class="field"><label for="p2">Display name</label><input id="p2" class="input" name="displayName" value="${esc(me.displayName || '')}" maxlength="40"></div>
@@ -112,42 +105,68 @@ route('/settings', { ...A, title: 'Settings', view: async ({ query }) => {
     <div class="field" style="border:0;background:none"><label for="p5">Experience</label><select id="p5" class="select" name="experience">${['beginner', 'intermediate', 'advanced', 'professional'].map((x) => `<option ${me.experience === x ? 'selected' : ''}>${x}</option>`).join('')}</select></div></div>
     <div class="form-error"></div><div><button class="btn primary" type="submit">Save profile</button></div></form>`;
   if (STAB === 'security') {
-    const [{ sessions }, linked] = await Promise.all([api('/me/sessions'), api('/me/identities')]);
-    body = `<div class="stack loose" style="max-width:720px">${oauthNote}
+    const ids = await api('/me/identities'); SEC.ids = ids;
+    const hasPassword = ids.methods.some((m) => m.providerId === 'password');
+    body = `<div class="stack loose" style="max-width:720px">
       <section class="panel"><div class="cell-h"><h3>Email</h3>${me.emailVerified ? tag('Verified', 'ok') : tag('Not verified', 'warn')}</div><div class="cell row between"><span class="mono">${esc(me.email)}</span>${me.emailVerified ? '' : '<a class="btn sm" href="#/verify-email">Verify</a>'}</div></section>
       <section class="panel"><div class="cell-h"><h3>Two-factor authentication</h3>${me.totpEnabled ? tag('On', 'ok') : tag('Off', 'warn')}</div><div class="cell" id="totp">${me.totpEnabled ? `<p class="dim small">Sign-ins ask for a code from your authenticator app.</p><button class="btn danger sm" data-act="2fa-off" style="margin-top:12px">Turn off</button>` : `<p class="dim small">Protect your account with an authenticator app (any TOTP app works).</p><button class="btn primary sm" data-act="2fa-setup" style="margin-top:12px">Set up two-factor</button>`}</div></section>
-      ${linkedPanel(linked)}
-      <section class="panel"><div class="cell-h"><h3>Password</h3>${me.hasPassword ? '' : tag('Not set', 'warn')}</div><form class="cell stack" data-form="password" novalidate>${me.hasPassword ? '<div class="field"><label for="w1">Current password</label><input id="w1" class="input" type="password" name="current" autocomplete="current-password" required></div>' : '<p class="dim small">You sign in with a linked account. Set a password to also sign in with your username or email.</p>'}<div class="field"><label for="w2">New password</label><input id="w2" class="input" type="password" name="next" autocomplete="new-password" minlength="10" required></div><div class="form-error"></div><div><button class="btn" type="submit">${me.hasPassword ? 'Change password' : 'Set password'}</button></div><p class="xs faint">Other sessions are signed out when you change it.</p></form></section>
-      <section class="panel"><div class="cell-h"><h3>Sessions</h3><button class="btn sm danger" data-act="sess-others">Sign out other sessions</button></div><div class="tablewrap"><table class="t"><tbody>${sessions.map((s) => `<tr><td class="small trunc" style="max-width:280px">${esc(s.ua || 'Unknown device')}</td><td class="mono small dim">${esc(s.ip || '')}</td><td class="small dim">${s.current ? tag('This device', 'ok') : `active ${ago(s.lastUsed)}`}</td><td class="r">${s.current ? '' : `<button class="btn ghost sm" data-act="sess-kill" data-id="${s.id}">Sign out</button>`}</td></tr>`).join('')}</tbody></table></div></section></div>`;
+      ${methodsPanel(ids)}
+      <section class="panel"><div class="cell-h"><h3>Password</h3>${hasPassword ? '' : tag('Not set', 'warn')}</div>${hasPassword
+        ? `<form class="cell stack" data-form="password" novalidate><div class="field"><label for="w1">Current password</label><input id="w1" class="input" type="password" name="current" autocomplete="current-password" required></div><div class="field"><label for="w2">New password</label><input id="w2" class="input" type="password" name="next" autocomplete="new-password" minlength="10" required></div><div class="form-error"></div><div><button class="btn" type="submit">Change password</button></div><p class="xs faint">Your other devices are signed out when you change it.</p></form>`
+        : `<div class="cell stack"><p class="dim small">You sign in with ${esc(ids.methods.map((m) => m.label).join(' and ') || 'a linked account')}. To also sign in with your email and a password, we'll email you a link to set one.</p><div><button class="btn" data-act="pw-set">Email me a link</button></div></div>`}</section>
+      <section class="panel"><div class="cell-h"><h3>Devices</h3></div><div class="cell row between wrap" style="gap:12px"><p class="dim small" style="max-width:52ch">Lost a device or used a shared computer? Sign out everywhere, including here. You'll need to sign in again.</p><button class="btn danger sm" data-act="sign-out-all">Sign out everywhere</button></div></section></div>`;
   }
-  return `<div class="page"><div class="pagehead"><div><h1>Settings</h1><p>Profile, password, linked accounts, two-factor and active sessions.</p></div></div>
+  return `<div class="page"><div class="pagehead"><div><h1>Settings</h1><p>Profile, sign-in methods, password, two-factor and devices.</p></div></div>
     <div class="tabs" style="margin-bottom:24px">${[['profile', 'Profile'], ['security', 'Security']].map(([k, l]) => `<button class="${STAB === k ? 'on' : ''}" data-act="stab" data-k="${k}">${l}</button>`).join('')}</div>${body}</div>`;
 } });
 onAct('stab', (el) => { STAB = el.dataset.k; refresh(); });
-function linkedPanel({ providers, identities }) {
-  if (!providers.length && !identities.length) return '';
-  const byId = new Map(identities.map((x) => [x.provider, x]));
-  const ids = [...new Set([...providers.map((p) => p.id), ...identities.map((x) => x.provider)])];
-  const label = (id) => providers.find((p) => p.id === id)?.label || byId.get(id)?.label || id;
-  return `<section class="panel"><div class="cell-h"><h3>Linked accounts</h3></div><div class="tablewrap"><table class="t"><tbody>${ids.map((id) => {
-    const x = byId.get(id);
-    const action = x ? `<button class="btn ghost sm" data-act="oauth-unlink" data-p="${esc(id)}">Unlink</button>`
-      : providers.some((p) => p.id === id) ? `<button class="btn sm" data-act="oauth-link" data-p="${esc(id)}">Link</button>` : '';
-    return `<tr><td><b>${esc(label(id))}</b></td><td class="small dim">${x ? `<span class="mono">${esc(x.login || x.email || '')}</span> · linked ${ago(x.createdAt)}` : 'Not linked'}</td><td class="r">${action}</td></tr>`;
+
+/* ---------- security: sign-in methods live in Firebase; each change first confirms it's really you ---------- */
+const SEC = { ids: null };
+function methodsPanel({ methods, available }) {
+  const linked = new Map(methods.map((m) => [m.providerId, m]));
+  const rows = [...methods.filter((m) => m.providerId !== 'password'), ...available.filter((a) => !linked.has(a.providerId))];
+  if (!rows.length) return '';
+  const onlyOne = methods.length <= 1;
+  return `<section class="panel"><div class="cell-h"><h3>Sign-in methods</h3></div><div class="tablewrap"><table class="t"><tbody>${rows.map((m) => {
+    const x = linked.get(m.providerId);
+    const action = x ? (onlyOne ? '<span class="xs faint">Your only sign-in method</span>' : `<button class="btn ghost sm" data-act="method-unlink" data-p="${esc(m.providerId)}" data-label="${esc(m.label)}">Unlink</button>`)
+      : `<button class="btn sm" data-act="method-link" data-p="${esc(m.providerId)}" data-label="${esc(m.label)}">Link</button>`;
+    return `<tr><td><b>${esc(m.label)}</b></td><td class="small dim">${x ? `<span class="mono">${esc(x.email || x.displayName || 'linked')}</span>` : 'Not linked'}</td><td class="r">${action}</td></tr>`;
   }).join('')}</tbody></table></div></section>`;
 }
-onAct('oauth-link', async (el) => {
-  const r = await api(`/auth/oauth/${encodeURIComponent(el.dataset.p)}/start`, { method: 'POST', body: { mode: 'link' } });
-  location.href = r.url;
+/** Asks how to confirm identity: the password if there is one, otherwise a linked Google/GitHub account. */
+async function askConfirmation(title, verb) {
+  const methods = SEC.ids?.methods || [];
+  const hasPassword = methods.some((m) => m.providerId === 'password');
+  const other = methods.find((m) => m.providerId !== 'password');
+  const r = await dialog({ title, body: hasPassword
+    ? `<p class="dim">Confirm with your password.</p><div class="field"><label for="cf1">Password</label><input id="cf1" class="input" type="password" name="password" autocomplete="current-password" required></div>`
+    : `<p class="dim">Confirm with ${esc(other?.label || 'your linked account')}. A sign-in window will open.</p>`,
+  actions: [{ label: 'Cancel', kind: 'ghost', value: null }, { label: verb, kind: 'primary', value: 'go', submit: true }] });
+  if (r.value !== 'go') return null;
+  return hasPassword ? { password: String(r.form.get('password') || '') } : { providerId: other?.providerId };
+}
+onAct('method-link', async (el) => {
+  const how = await askConfirmation(`Link ${el.dataset.label}?`, 'Continue'); if (!how) return;
+  await linkMethod(state.me, how, el.dataset.p); toast(`${el.dataset.label} linked. You can now sign in with it.`); refresh();
 });
-onAct('oauth-unlink', async (el) => {
-  if (!(await confirmDlg('Unlink this account?', 'You will no longer be able to sign in with it.', 'Unlink', true))) return;
-  await api(`/me/identities/${encodeURIComponent(el.dataset.p)}`, { method: 'DELETE' }); toast('Account unlinked.'); refresh();
+onAct('method-unlink', async (el) => {
+  const how = await askConfirmation(`Unlink ${el.dataset.label}?`, 'Unlink'); if (!how) return;
+  await unlinkMethod(state.me, how, el.dataset.p); toast(`${el.dataset.label} unlinked.`); refresh();
 });
 onForm('profile', async (f) => { if (!f.country) delete f.country; await api('/me', { method: 'PATCH', body: f }); await loadMe(); toast('Profile saved.'); refresh(); });
-onForm('password', async (f, fm) => { await api('/me/password', { method: 'POST', body: f }); fm.reset(); await loadMe(); toast('Password saved. Other sessions were signed out.'); refresh(); });
-onAct('sess-others', async () => { const r = await api('/me/sessions/revoke-others', { method: 'POST' }); toast(`Signed out ${r.revoked} other session${r.revoked === 1 ? '' : 's'}.`); refresh(); });
-onAct('sess-kill', async (el) => { await api(`/me/sessions/${el.dataset.id}`, { method: 'DELETE' }); toast('Session signed out.'); refresh(); });
+onForm('password', async (f, fm) => {
+  if (String(f.next || '').length < 10) throw Object.assign(new Error('New password must be at least 10 characters.'), { data: { field: 'next' } });
+  const r = await changePassword(state.me, f.current || '', f.next); fm.reset();
+  if (r.twoFactor) { toast('Password changed. Enter your two-factor code to stay signed in.'); return go('/2fa'); }
+  await loadMe(); toast('Password changed. Your other devices were signed out.'); refresh();
+});
+onAct('pw-set', async () => { await sendPasswordReset(state.me.email); toast(`We emailed a link to ${state.me.email}.`); });
+onAct('sign-out-all', async () => {
+  if (!(await confirmDlg('Sign out everywhere?', 'Every device is signed out, including this one.', 'Sign out everywhere', true))) return;
+  await api('/me/sign-out-everywhere', { method: 'POST' }); await signOutEverywhere(); state.me = null; toast('Signed out everywhere.'); go('/login');
+});
 onAct('2fa-setup', async () => {
   const r = await api('/me/2fa/setup', { method: 'POST' });
   document.getElementById('totp').innerHTML = `<ol class="stack small" style="padding-left:18px"><li>Add this key to your authenticator app (choose "enter a setup key", time-based):<div class="copyline" style="margin-top:8px"><span>${esc(r.secret.replace(/(.{4})/g, '$1 ').trim())}</span><button class="btn ghost sm" data-act="copy" data-text="${esc(r.secret)}">${icon('copy')}</button></div><div class="xs faint" style="margin-top:6px">Or open this URI on your phone: <span class="mono">${esc(r.uri)}</span></div></li>
@@ -155,6 +174,6 @@ onAct('2fa-setup', async () => {
 });
 onForm('2fa-enable', async (f) => { await api('/me/2fa/enable', { method: 'POST', body: f }); await loadMe(); toast('Two-factor authentication is on.'); refresh(); });
 onAct('2fa-off', async () => {
-  const r = await dialog({ title: 'Turn off two-factor?', body: `<p class="dim">Confirm with ${state.me.hasPassword ? 'your password and ' : ''}a current code.</p>${state.me.hasPassword ? '<div class="field"><label for="x1">Password</label><input id="x1" class="input" type="password" name="password" required></div>' : ''}<div class="field"><label for="x2">Code</label><input id="x2" class="input mono" name="code" inputmode="numeric" maxlength="6" required></div>`, actions: [{ label: 'Cancel', kind: 'ghost', value: null }, { label: 'Turn off', kind: 'danger', value: 'go', submit: true }] });
+  const r = await dialog({ title: 'Turn off two-factor?', body: `<p class="dim">Confirm with a current code from your authenticator app.</p><div class="field"><label for="x2">Code</label><input id="x2" class="input mono" name="code" inputmode="numeric" maxlength="6" required></div>`, actions: [{ label: 'Cancel', kind: 'ghost', value: null }, { label: 'Turn off', kind: 'danger', value: 'go', submit: true }] });
   if (r.value !== 'go') return; await api('/me/2fa/disable', { method: 'POST', body: Object.fromEntries(r.form) }); await loadMe(); toast('Two-factor authentication is off.'); refresh();
 });

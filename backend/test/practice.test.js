@@ -12,7 +12,10 @@ process.env.NODE_ENV = 'test'; process.env.EXPOSE_DEV_LINKS = '1'; process.env.L
 const { config } = await import('../server/config.js');
 const { connectDb, closeDb, dropDb, count, find } = await import('../server/db.js');
 const { createApp } = await import('../server/index.js');
-const { loadFixtures, PASSWORD } = await import('./fixtures.js');
+const { loadFixtures, uidOf } = await import('./fixtures.js');
+const { useIdentityProvider } = await import('../server/identity.js');
+const { FakeFirebase } = await import('./fake-identity.js');
+const fake = new FakeFirebase(); useIdentityProvider(fake);
 const { base32Decode } = await import('../server/lib.js');
 const { buildChallenges, loadPrivate, seedPractice, PRACTICE_SLUG } = await import('../scripts/seed-practice.js');
 
@@ -161,7 +164,7 @@ for (const c of challenges) {
 let server, base;
 before(async () => {
   await connectDb({ dbName: `${config.mongoDb}_test_${crypto.randomBytes(4).toString('hex')}` });
-  await loadFixtures();
+  await loadFixtures(fake);
   server = createApp().listen(0); await new Promise((r) => server.once('listening', r));
   base = `http://127.0.0.1:${server.address().port}/api`;
 });
@@ -194,7 +197,7 @@ test('seed creates a published practice set once and is idempotent', async () =>
 
 test('a player registers, downloads a file, and solves through the API', async () => {
   const c = client();
-  assert.equal((await c('/auth/login', { method: 'POST', body: { login: 'hoot', password: PASSWORD } })).status, 200);
+  assert.equal((await c('/auth/firebase', { method: 'POST', body: { idToken: fake.idToken(uidOf('hoot')) } })).status, 200);
   assert.equal((await c(`/events/${PRACTICE_SLUG}/register`, { method: 'POST', body: {} })).status, 200);
   const board = (await c(`/events/${PRACTICE_SLUG}/challenges`)).data;
   const list = board.challenges || board;

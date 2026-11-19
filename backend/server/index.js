@@ -15,7 +15,7 @@ import eventRoutes from './routes/events.js';
 import teamRoutes from './routes/teams.js';
 import manageRoutes from './routes/manage.js';
 import platformRoutes from './routes/platform.js';
-import oauthRoutes from './routes/oauth.js';
+import signinRoutes from './routes/signin.js';
 
 export function createApp() {
   const app = express();
@@ -38,9 +38,14 @@ export function createApp() {
     res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
     // Only set CSP in production or when serving frontend from the same origin
     if (!config.corsOrigin) {
+      // Firebase sign-in: the pinned SDK loads from www.gstatic.com, talks to Google's identity APIs, and Google/GitHub
+      // sign-in runs in a popup with a helper frame on the project's auth domain.
+      const authFrame = config.firebaseWeb.authDomain ? ` https://${config.firebaseWeb.authDomain}` : '';
       res.setHeader('Content-Security-Policy', [
-        "default-src 'self'", "script-src 'self'", "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
-        "font-src 'self' https://fonts.gstatic.com", "img-src 'self' data: blob:", "connect-src 'self'", "frame-ancestors 'none'", "base-uri 'self'", "form-action 'self'",
+        "default-src 'self'", "script-src 'self' https://www.gstatic.com/firebasejs/13.1.0/", "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+        "font-src 'self' https://fonts.gstatic.com", "img-src 'self' data: blob:",
+        "connect-src 'self' https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://www.googleapis.com",
+        `frame-src${authFrame || " 'none'"}`, "frame-ancestors 'none'", "base-uri 'self'", "form-action 'self'",
       ].join('; '));
     }
     if (config.prod) res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
@@ -49,7 +54,7 @@ export function createApp() {
 
   app.use('/api', (_req, _res, next) => requestCache.run(new Map(), next));
   app.use('/api', express.json({ limit: '200kb' }), sessionMiddleware, csrfGuard, (req, res, next) => { res.setHeader('Cache-Control', 'no-store'); next(); });
-  app.use('/api', authRoutes, oauthRoutes, eventRoutes, teamRoutes, manageRoutes, platformRoutes);
+  app.use('/api', signinRoutes, authRoutes, eventRoutes, teamRoutes, manageRoutes, platformRoutes);
   app.get('/api/health', (_req, res) => res.json({ ok: true }));
   app.use('/api', (_req, _res, next) => next(new HttpError(404, 'Unknown API route.')));
 

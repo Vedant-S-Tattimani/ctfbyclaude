@@ -2,6 +2,7 @@
 import { Router } from 'express';
 import { col, findOne, find, count, insert, update, byIds, escapeRegex, now, audit } from '../db.js';
 import { bad, forbidden, notFound, str, oneOf, requireAuth, requireRole, slugify, publicUser } from '../lib.js';
+import { setAccountDisabled } from '../identity.js';
 import { orgRole, phase, scoreboard, pushNotify } from '../core.js';
 import { syncUserToFirebase, removeUserFromFirebase, syncOrgMemberToFirebase, removeOrgMemberFromFirebase, pushAuditToFirebase } from '../firebase.js';
 
@@ -184,7 +185,8 @@ r.patch('/admin/users/:id', async (req, res) => {
   if (u.id === req.user.id) throw bad("You can't change your own role or status here.");
   const role = oneOf(req.body.role, ['participant', 'organizer', 'admin'], 'Role', u.role); const status = oneOf(req.body.status, ['active', 'suspended'], 'Status', u.status);
   await update('users', { id: u.id }, { role, status });
-  if (status === 'suspended') await col('sessions').deleteMany({ user_id: u.id });
+  // Suspension disables the Firebase account too, which signs the person out everywhere and blocks every sign-in method.
+  if (status !== u.status && u.firebase_uid) await setAccountDisabled(u.firebase_uid, status === 'suspended');
   await audit(req.user.id, status !== u.status ? `user.${status === 'suspended' ? 'suspended' : 'restored'}` : 'user.role_changed', `user:${u.username}`, { role, status, reason: req.body.reason || null });
   // Sync role change to Firebase: add if promoted, remove if demoted to participant or suspended
   if (['admin', 'organizer'].includes(role) && status === 'active') {

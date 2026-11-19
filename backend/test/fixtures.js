@@ -1,17 +1,21 @@
 // Minimal data for the API tests. Lives only in the throwaway test database, which the tests drop afterwards.
 import { col, insert, now } from '../server/db.js';
-import { hashPassword, randomCode, randomToken } from '../server/lib.js';
+import { randomCode, randomToken } from '../server/lib.js';
 import { setStaticFlag } from '../server/core.js';
 
-export const PASSWORD = 'test-password-123';
+// Every fixture user has a Firebase account in the fake provider with uid "uid-<username>".
+export const uidOf = (username) => `uid-${username}`;
 const HR = 3600_000, DAY = 24 * HR;
 
-export async function loadFixtures() {
-  const T = now(); const H = hashPassword(PASSWORD);
-  const user = (username, role = 'participant') => insert('users', {
-    username, email: `${username}@example.test`, display_name: username, password_hash: H, role, status: 'active', email_verified: 1,
-    totp_secret: null, totp_enabled: 0, experience: null, interests: [], language: 'en', country: null, bio: null, onboarded: 1, created_at: T, last_seen: null,
-  });
+export async function loadFixtures(fake) {
+  const T = now();
+  const user = (username, role = 'participant') => {
+    fake.addAccount({ uid: uidOf(username), email: `${username}@example.test`, displayName: username });
+    return insert('users', {
+      firebase_uid: uidOf(username), username, email: `${username}@example.test`, display_name: username, role, status: 'active', email_verified: 1,
+      totp_enabled: 0, experience: null, interests: [], language: 'en', country: null, bio: null, onboarded: 1, created_at: T, last_seen: null,
+    });
+  };
   const u = {};
   for (const [name, role] of [['admin', 'admin'], ['mira_o', 'organizer'], ['vsg_lind', 'organizer'], ['k3rnel_v'], ['ada_hex'], ['mt_rx'], ['felix'], ['ana'], ['qbit_lena'], ['hoot']]) u[name] = await user(name, role);
 
