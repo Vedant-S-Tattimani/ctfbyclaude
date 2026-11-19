@@ -74,8 +74,10 @@ body:has(.lens.on) .you-cursor svg { transform: scale(.6); }
 .eyes-cursor .eye { position: relative; display: grid; place-items: center; width: 17px; height: 20px; border-radius: 50%; background: #fff; border: 1.5px solid var(--ink);
   box-shadow: 0 2px 4px rgba(0, 0, 0, .18); transform-origin: center; animation: eyesBlink 5.2s infinite; transition: scale .25s var(--spring); }
 .eyes-cursor .eye:nth-child(2) { animation-delay: .04s; }
-.eyes-cursor .eye i { width: 8px; height: 9px; border-radius: 50%; background: var(--ink); transition: transform .08s linear; }
+.eyes-cursor .eye i { width: 9px; height: 10px; border-radius: 50%; background: var(--ink); }
 .eyes-cursor.hide { opacity: 0; }
+/* On the home page the eyes are the cursor companion, so the YOU tag would be a second cursor. */
+body:has(.hero2) .you-cursor { display: none; }
 .eyes-cursor.hide .eye { scale: .4; }
 @keyframes eyesBlink { 0%, 93%, 100% { transform: scaleY(1); } 96% { transform: scaleY(.08); } }
 
