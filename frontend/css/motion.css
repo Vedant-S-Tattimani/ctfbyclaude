@@ -78,6 +78,9 @@ body:has(.lens.on) .you-cursor svg { transform: scale(.6); }
 .eyes-cursor.hide { opacity: 0; }
 /* On the home page the eyes are the cursor companion, so the YOU tag would be a second cursor. */
 body:has(.hero2) .you-cursor { display: none; }
+/* Home page cursor: a crosshair (hotspot at its centre), kept on links and buttons too; text fields keep the I-beam. */
+body:has(.hero2), body:has(.hero2) * { cursor: url('/img/crosshair.svg') 16 16, crosshair; }
+body:has(.hero2) input, body:has(.hero2) textarea { cursor: text; }
 .eyes-cursor.hide .eye { scale: .4; }
 @keyframes eyesBlink { 0%, 93%, 100% { transform: scaleY(1); } 96% { transform: scaleY(.08); } }
 
