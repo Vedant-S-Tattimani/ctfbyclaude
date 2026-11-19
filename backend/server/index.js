@@ -39,10 +39,10 @@ export function createApp() {
     // Only set CSP in production or when serving frontend from the same origin
     if (!config.corsOrigin) {
       // Firebase sign-in: the pinned SDK loads from www.gstatic.com, talks to Google's identity APIs, and Google/GitHub
-      // sign-in runs in a popup with a helper frame on the project's auth domain.
+      // sign-in runs in a popup with a helper frame on the project's auth domain (set up by Google's api.js loader).
       const authFrame = config.firebaseWeb.authDomain ? ` https://${config.firebaseWeb.authDomain}` : '';
       res.setHeader('Content-Security-Policy', [
-        "default-src 'self'", "script-src 'self' https://www.gstatic.com/firebasejs/13.1.0/", "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+        "default-src 'self'", "script-src 'self' https://www.gstatic.com/firebasejs/13.1.0/ https://apis.google.com", "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
         "font-src 'self' https://fonts.gstatic.com", "img-src 'self' data: blob:",
         "connect-src 'self' https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://www.googleapis.com",
         `frame-src${authFrame || " 'none'"}`, "frame-ancestors 'none'", "base-uri 'self'", "form-action 'self'",

@@ -37,4 +37,5 @@ if (process.argv[1]?.endsWith('bootstrap.js')) {
   await connectDb();
   initFirebase();
   try { await bootstrapAdmin(); } finally { await closeDb(); }
+  process.exit(0); // the Firebase Realtime Database connection would otherwise keep the process alive
 }

@@ -88,4 +88,5 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
     if (process.argv.includes('--cleanup')) await cleanupLegacyAuth();
     else await migrateAccounts({ dryRun: process.argv.includes('--dry-run') });
   } finally { await closeDb(); }
+  process.exit(0); // the Firebase Realtime Database connection would otherwise keep the process alive
 }

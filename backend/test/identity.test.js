@@ -5,6 +5,8 @@ import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
 
 process.env.NODE_ENV = 'test'; process.env.LOGIN_LIMIT_PER_IP = '1000'; process.env.FIREBASE_SIGNIN_PROVIDERS = 'google,github';
+// Fixed web settings, so the result doesn't depend on what is in the developer's backend/.env.
+Object.assign(process.env, { FIREBASE_WEB_API_KEY: 'test-web-key', FIREBASE_AUTH_DOMAIN: 'example-test.firebaseapp.com', FIREBASE_PROJECT_ID: 'example-test', FIREBASE_APP_ID: '1:0:web:test' });
 const { config } = await import('../server/config.js');
 const { connectDb, closeDb, dropDb, col, findOne, insert, now } = await import('../server/db.js');
 const { createApp } = await import('../server/index.js');
@@ -33,9 +35,13 @@ function client() {
 }
 const signIn = (c, uid, extra = {}) => c('/auth/firebase', { method: 'POST', body: { idToken: fake.idToken(uid, extra), ...extra } });
 
-test('config tells the browser which sign-in buttons to show', async () => {
+test('config gives the browser its Firebase settings and which sign-in buttons to show', async () => {
   const r = await client()('/auth/config');
-  assert.deepEqual(r.data.providers, []); assert.equal(r.data.ready, false, 'no web API key in tests, so the browser SDK is not offered');
+  assert.equal(r.data.ready, true); assert.equal(r.data.firebase.authDomain, 'example-test.firebaseapp.com');
+  assert.deepEqual(r.data.providers, ['google', 'github']);
+  const csp = (await fetch(`${base}/health`)).headers.get('content-security-policy');
+  assert.match(csp, /script-src [^;]*https:\/\/apis\.google\.com/, 'Google popup helper script is allowed');
+  assert.match(csp, /frame-src https:\/\/example-test\.firebaseapp\.com/, 'auth helper frame is allowed');
 });
 
 test('Google sign-in links to an existing profile only when both sides verified the email', async () => {
