@@ -21,16 +21,30 @@ export function initFirebase() {
   if (firebaseApp) return db;
 
   const keyPath = process.env.FIREBASE_SERVICE_ACCOUNT_PATH
-    || path.join(ROOT, 'serviceAccountKey.json');
+    || (fs.existsSync('/etc/secrets/serviceAccountKey.json') ? '/etc/secrets/serviceAccountKey.json' : path.join(ROOT, 'serviceAccountKey.json'));
 
-  if (!fs.existsSync(keyPath)) {
+  let serviceAccount = null;
+  if (process.env.FIREBASE_SERVICE_ACCOUNT_JSON) {
+    try {
+      serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_JSON);
+    } catch (err) {
+      console.error('[firebase] Failed to parse FIREBASE_SERVICE_ACCOUNT_JSON:', err.message);
+      return null;
+    }
+  } else if (fs.existsSync(keyPath)) {
+    try {
+      serviceAccount = JSON.parse(fs.readFileSync(keyPath, 'utf8'));
+    } catch (err) {
+      console.error('[firebase] Failed to read service account key:', err.message);
+      return null;
+    }
+  } else {
     console.warn('[firebase] No service account key found. Firebase sync is disabled.');
-    console.warn(`[firebase] Place your serviceAccountKey.json at ${keyPath} or set FIREBASE_SERVICE_ACCOUNT_PATH.`);
+    console.warn(`[firebase] Place your serviceAccountKey.json at ${keyPath} or set FIREBASE_SERVICE_ACCOUNT_PATH or FIREBASE_SERVICE_ACCOUNT_JSON.`);
     return null;
   }
 
   try {
-    const serviceAccount = JSON.parse(fs.readFileSync(keyPath, 'utf8'));
     const databaseURL = process.env.FIREBASE_DATABASE_URL
       || `https://${serviceAccount.project_id}-default-rtdb.asia-southeast1.firebasedatabase.app`;
 
