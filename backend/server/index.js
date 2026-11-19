@@ -5,6 +5,7 @@ import path from 'node:path';
 import fs from 'node:fs';
 import { config, ROOT } from './config.js';
 import { connectDb } from './db.js';
+import { initFirebase } from './firebase.js';
 import { startReaper } from './instances.js';
 import { requestCache } from './core.js';
 import { bootstrapAdmin } from '../scripts/bootstrap.js';
@@ -72,6 +73,7 @@ export function createApp() {
 
 if (process.argv[1] && path.resolve(process.argv[1]) === path.join(ROOT, 'server', 'index.js')) {
   await connectDb();
+  initFirebase();
   await bootstrapAdmin();
   startReaper();
   createApp().listen(config.port, config.host, () => {

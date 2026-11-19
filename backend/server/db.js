@@ -2,6 +2,7 @@
 import crypto from 'node:crypto';
 import { MongoClient } from 'mongodb';
 import { config } from './config.js';
+import { pushAuditToFirebase } from './firebase.js';
 
 let client = null;
 let database = null;
@@ -117,7 +118,9 @@ export async function byIds(name, ids, projection) {
 export const escapeRegex = (s) => String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 export async function audit(actorId, action, target, meta = {}, extra = {}) {
-  await insert('audit_log', { actor_id: actorId ?? null, action, target: target ?? null, meta, event_id: extra.eventId ?? null, org_id: extra.orgId ?? null, ip: extra.ip ?? null, created_at: now() });
+  const entry = { actor_id: actorId ?? null, action, target: target ?? null, meta, event_id: extra.eventId ?? null, org_id: extra.orgId ?? null, ip: extra.ip ?? null, created_at: now() };
+  await insert('audit_log', entry);
+  pushAuditToFirebase(entry).catch(() => {});
 }
 export function notify(userId, kind, title, body = '', link = '') {
   return insert('notifications', { user_id: userId, kind, title, body, link, read: 0, created_at: now() });

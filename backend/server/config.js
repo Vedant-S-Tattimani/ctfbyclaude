@@ -16,7 +16,15 @@ if (fs.existsSync(envFile)) {
 }
 
 // Some hosts' default resolver cannot answer the SRV lookups that mongodb+srv:// URIs need.
-if (process.env.DNS_SERVERS) dns.setServers(process.env.DNS_SERVERS.split(',').map((s) => s.trim()).filter(Boolean));
+// Opt-in only (DNS_SERVERS=1.1.1.1,8.8.8.8): forcing public resolvers by default breaks networks that block
+// outside DNS or rely on internal hostnames.
+if (process.env.DNS_SERVERS) {
+  try {
+    dns.setServers(process.env.DNS_SERVERS.split(',').map((s) => s.trim()).filter(Boolean));
+  } catch (err) {
+    console.warn(`[config] Ignoring DNS_SERVERS: ${err.message}`);
+  }
+}
 
 const dataDir = path.resolve(ROOT, process.env.DATA_DIR || 'data');
 

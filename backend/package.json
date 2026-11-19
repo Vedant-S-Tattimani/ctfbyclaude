@@ -10,8 +10,9 @@
   },
   "scripts": {
     "start": "node server/index.js",
-    "dev": "node --watch server/index.js",
+    "dev": "node --watch-path=server server/index.js",
     "bootstrap": "node scripts/bootstrap.js",
+    "verify": "node scripts/verify-setup.js",
     "test": "node --test --test-concurrency=1 test/*.test.js",
     "seed:practice": "node scripts/seed-practice.js"
   },
@@ -19,6 +20,7 @@
     "bcryptjs": "^3.0.3",
     "cors": "^2.8.5",
     "express": "^5.3.0",
+    "firebase-admin": "^14.5.1",
     "mongodb": "^6.22.0",
     "multer": "^2.5.0"
   }

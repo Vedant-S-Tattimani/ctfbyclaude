@@ -2,6 +2,7 @@
 // Runs on server start; also runnable on its own: npm run bootstrap
 import { findOne, insert, now, audit, connectDb, closeDb } from '../server/db.js';
 import { hashPassword, passwordPolicy, USERNAME_RE, EMAIL_RE } from '../server/lib.js';
+import { initFirebase, syncUserToFirebase } from '../server/firebase.js';
 
 export async function bootstrapAdmin() {
   if (await findOne('users', { role: 'admin' }, { projection: { id: 1 } })) return false;
@@ -19,11 +20,16 @@ export async function bootstrapAdmin() {
     totp_secret: null, totp_enabled: 0, experience: null, interests: [], language: 'en', country: null, bio: null, onboarded: 1, created_at: now(), last_seen: null,
   });
   await audit(id, 'platform.bootstrapped', `user:${id}`);
+  const createdUser = await findOne('users', { id });
+  if (createdUser) {
+    await syncUserToFirebase(createdUser).catch(() => {});
+  }
   console.log(`[bootstrap] Created platform admin "${username}".`);
   return true;
 }
 
 if (process.argv[1]?.endsWith('bootstrap.js')) {
   await connectDb();
+  initFirebase();
   try { await bootstrapAdmin(); } finally { await closeDb(); }
 }

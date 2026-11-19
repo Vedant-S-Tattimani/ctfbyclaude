@@ -10,6 +10,7 @@ import { config } from '../config.js';
 import { col, findOne, find, count, insert, now, audit } from '../db.js';
 import { HttpError, bad, sha256, randomToken, safeEqual, parseCookies, createSession, requireAuth, rateHit, USERNAME_RE } from '../lib.js';
 import { enabledProviders, getProvider, providerLabel, authorizeUrl, fetchProfile } from '../oauth.js';
+import { syncUserToFirebase } from '../firebase.js';
 
 const r = Router();
 const STATE_COOKIE = 'ca_oauth';
@@ -109,6 +110,7 @@ async function finishLogin(req, res, p, st, profile) {
   await createSession(res, req, user.id, !!user.totp_enabled);
   res.append('Set-Cookie', `${STATE_COOKIE}=; ${cookieAttrs(0)}`); // createSession replaced the header list
   await audit(user.id, 'user.login', `user:${user.id}`, { via: p.id, twoFactor: !!user.totp_enabled }, { ip: req.ip });
+  syncUserToFirebase(user).catch(() => {}); // no-op unless Firebase is configured and the user is an admin/organizer
   const dest = user.totp_enabled ? '/2fa' : isNew || !user.onboarded ? '/onboarding' : st.next || '/dashboard';
   res.redirect(302, toSpa(withParam(dest, 'oauth', isNew ? 'created' : 'signed-in')));
 }

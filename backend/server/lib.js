@@ -91,7 +91,17 @@ export const newTotpSecret = () => base32Encode(crypto.randomBytes(20));
 /* ---------- sessions ---------- */
 export const COOKIE = 'ca_session';
 export function parseCookies(header = '') {
-  const o = {}; for (const part of header.split(';')) { const i = part.indexOf('='); if (i > 0) o[part.slice(0, i).trim()] = decodeURIComponent(part.slice(i + 1).trim()); } return o;
+  const o = {};
+  if (!header) return o;
+  for (const part of header.split(';')) {
+    const i = part.indexOf('=');
+    if (i > 0) {
+      const k = part.slice(0, i).trim();
+      const raw = part.slice(i + 1).trim();
+      try { o[k] = decodeURIComponent(raw); } catch { o[k] = raw; }
+    }
+  }
+  return o;
 }
 export async function createSession(res, req, userId, pending2fa = false) {
   const token = randomToken();
@@ -105,6 +115,8 @@ export function clearSessionCookie(res) { res.setHeader('Set-Cookie', `${COOKIE}
 
 // Attaches req.user (full session) or req.pendingUser (password ok, 2FA outstanding).
 export async function sessionMiddleware(req, _res, next) {
+  // Sessions come only from the HttpOnly cookie. Never accept the token from a header or return it in a body:
+  // anything page scripts can read, an injected script could steal.
   const token = parseCookies(req.headers.cookie)[COOKIE];
   req.user = null; req.pendingUser = null;
   if (token) {

@@ -3,6 +3,7 @@ import { Router } from 'express';
 import { col, findOne, find, count, insert, update, byIds, escapeRegex, now, audit } from '../db.js';
 import { bad, forbidden, notFound, str, oneOf, requireAuth, requireRole, slugify, publicUser } from '../lib.js';
 import { orgRole, phase, scoreboard, pushNotify } from '../core.js';
+import { syncUserToFirebase, removeUserFromFirebase, syncOrgMemberToFirebase, removeOrgMemberFromFirebase, pushAuditToFirebase } from '../firebase.js';
 
 const r = Router();
 const orgBySlug = async (s) => { const o = await findOne('orgs', { slug: String(s) }); if (!o) throw notFound('Organization not found.'); return o; };
@@ -51,7 +52,10 @@ r.post('/orgs', requireAuth, async (req, res) => {
   const id = await insert('orgs', { slug, name, description: str(req.body.description, { name: 'Description', max: 1000 }),
     kind: oneOf(req.body.kind, ['university', 'community', 'company', 'training'], 'Type', 'community'), accent: '#8f1430', website: null, verified: 0, created_at: now() });
   await col('org_members').insertOne({ org_id: id, user_id: req.user.id, role: 'owner', created_at: now() });
-  await audit(req.user.id, 'org.created', `org:${slug}`, {}, { orgId: id }); res.json({ slug });
+  await audit(req.user.id, 'org.created', `org:${slug}`, {}, { orgId: id });
+  // Sync org owner to Firebase
+  syncOrgMemberToFirebase(id, req.user.id, 'owner', slug).catch(() => {});
+  res.json({ slug });
 });
 r.patch('/orgs/:slug', requireAuth, async (req, res) => {
   const o = await orgBySlug(req.params.slug); if (!await orgAdmin(o, req.user)) throw forbidden();
@@ -71,6 +75,8 @@ r.post('/orgs/:slug/members', requireAuth, async (req, res) => {
   if (await orgRole(o.id, u.id)) throw bad(`${u.username} is already a member.`);
   await col('org_members').insertOne({ org_id: o.id, user_id: u.id, role, created_at: now() });
   await pushNotify(u.id, 'org', `You joined ${o.name} as ${role}`, '', `#/orgs/${o.slug}`); await audit(req.user.id, 'org.member_added', `user:${u.id}`, { role }, { orgId: o.id });
+  // Sync org membership to Firebase
+  syncOrgMemberToFirebase(o.id, u.id, role, o.slug).catch(() => {});
   res.json({ ok: true });
 });
 r.patch('/orgs/:slug/members/:uid', requireAuth, async (req, res) => {
@@ -78,6 +84,8 @@ r.patch('/orgs/:slug/members/:uid', requireAuth, async (req, res) => {
   if (await orgRole(o.id, uid) === 'owner') throw bad("The owner's role can't be changed.");
   const role = oneOf(req.body.role, ['admin', 'organizer', 'author', 'member'], 'Role');
   await update('org_members', { org_id: o.id, user_id: uid }, { role }); await audit(req.user.id, 'org.role_changed', `user:${uid}`, { role }, { orgId: o.id });
+  // Sync role change to Firebase
+  syncOrgMemberToFirebase(o.id, uid, role, o.slug).catch(() => {});
   res.json({ ok: true });
 });
 r.delete('/orgs/:slug/members/:uid', requireAuth, async (req, res) => {
@@ -85,6 +93,8 @@ r.delete('/orgs/:slug/members/:uid', requireAuth, async (req, res) => {
   if (uid !== req.user.id && !await orgAdmin(o, req.user)) throw forbidden();
   if (await orgRole(o.id, uid) === 'owner') throw bad('The owner cannot be removed.');
   await col('org_members').deleteOne({ org_id: o.id, user_id: uid }); await audit(req.user.id, 'org.member_removed', `user:${uid}`, {}, { orgId: o.id });
+  // Remove org membership from Firebase
+  removeOrgMemberFromFirebase(o.id, uid).catch(() => {});
   res.json({ ok: true });
 });
 
@@ -176,6 +186,12 @@ r.patch('/admin/users/:id', async (req, res) => {
   await update('users', { id: u.id }, { role, status });
   if (status === 'suspended') await col('sessions').deleteMany({ user_id: u.id });
   await audit(req.user.id, status !== u.status ? `user.${status === 'suspended' ? 'suspended' : 'restored'}` : 'user.role_changed', `user:${u.username}`, { role, status, reason: req.body.reason || null });
+  // Sync role change to Firebase: add if promoted, remove if demoted to participant or suspended
+  if (['admin', 'organizer'].includes(role) && status === 'active') {
+    syncUserToFirebase({ ...u, role, status }).catch(() => {});
+  } else {
+    removeUserFromFirebase(u.id).catch(() => {});
+  }
   res.json({ ok: true });
 });
 r.get('/admin/orgs', async (_req, res) => {

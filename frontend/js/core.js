@@ -8,6 +8,7 @@ import { enhance } from './fx.js';
 const API_BASE = (window.__CA_CONFIG__?.apiBase || '').replace(/\/$/, '');
 
 export async function api(path, { method = 'GET', body, form } = {}) {
+  // The session lives only in an HttpOnly cookie, which scripts cannot read; the browser sends it automatically.
   const opts = { method, headers: { 'X-CA-CSRF': '1' }, credentials: API_BASE ? 'include' : 'same-origin' };
   if (form) opts.body = form; else if (body !== undefined) { opts.headers['Content-Type'] = 'application/json'; opts.body = JSON.stringify(body); }
   let res;
@@ -16,6 +17,10 @@ export async function api(path, { method = 'GET', body, form } = {}) {
   if (!res.ok && !(res.status === 429 && data.result)) throw Object.assign(new Error(data.error || `Request failed (${res.status}).`), { status: res.status, data });
   return data;
 }
+// Earlier builds kept a copy of the session token and profile in browser storage; clear any leftovers.
+try { for (const k of ['ca_token', 'ca_user']) { localStorage.removeItem(k); sessionStorage.removeItem(k); } } catch { /* storage blocked */ }
+
+// The server is the only source of truth for who is signed in.
 export const state = { me: null, pending2fa: false, unread: 0 };
 export async function loadMe() { const r = await api('/auth/me'); state.me = r.user; state.pending2fa = r.pending2fa; state.unread = r.user?.unread || 0; return r.user; }
 

@@ -7,6 +7,7 @@ import {
   createSession, clearSessionCookie, requireAuth, rateHit, verifyTotp, newTotpSecret, selfUser, oneOf,
 } from '../lib.js';
 import { hub, eventBySlug, canModerate, scoreboard, CATEGORY_IDS, phase, assertCanView, teamIdsOf } from '../core.js';
+import { syncUserToFirebase } from '../firebase.js';
 
 const r = Router();
 const devLink = (path) => (config.exposeDevLinks ? `${config.baseUrl}/${path}` : undefined);
@@ -46,7 +47,8 @@ r.post('/auth/signup', async (req, res) => {
   const t = await issueEmailToken(id, 'verify', 48);
   await createSession(res, req, id);
   await audit(id, 'user.signup', `user:${id}`, {}, { ip: req.ip });
-  res.json({ ok: true, devLink: devLink(`#/verify-email?token=${t}`) });
+  const newUser = await findOne('users', { id });
+  res.json({ ok: true, user: selfUser(newUser), devLink: devLink(`#/verify-email?token=${t}`) });
 });
 
 r.post('/auth/login', async (req, res) => {
@@ -57,6 +59,8 @@ r.post('/auth/login', async (req, res) => {
   if (u.status !== 'active') throw new HttpError(403, 'This account is suspended. Contact support to appeal.');
   await createSession(res, req, u.id, !!u.totp_enabled);
   await audit(u.id, 'user.login', `user:${u.id}`, { twoFactor: !!u.totp_enabled }, { ip: req.ip });
+  // Sync admin/organiser profiles to Firebase on login
+  syncUserToFirebase(u).catch(() => {});
   res.json({ ok: true, twoFactor: !!u.totp_enabled });
 });
 
