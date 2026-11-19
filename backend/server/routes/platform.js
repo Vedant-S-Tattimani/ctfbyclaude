@@ -212,10 +212,16 @@ r.get('/admin/events', async (_req, res) => {
 });
 r.patch('/admin/events/:slug', async (req, res) => {
   const e = await findOne('events', { slug: String(req.params.slug) }); if (!e) throw notFound();
-  const status = oneOf(req.body.status, ['published', 'suspended', 'draft'], 'Status'); const reason = str(req.body.reason, { name: 'Reason', max: 500 });
-  await update('events', { id: e.id }, { status });
-  for (const s of await find('event_staff', { event_id: e.id })) await pushNotify(s.user_id, 'platform', `${e.name} was ${status === 'suspended' ? 'suspended' : 'restored'} by platform staff`, reason || '', `#/manage/${e.slug}`);
-  await audit(req.user.id, `event.${status}`, `event:${e.slug}`, { reason }, { eventId: e.id }); res.json({ ok: true });
+  const requested = oneOf(req.body.status, ['published', 'suspended', 'draft', 'restore'], 'Status'); const reason = str(req.body.reason, { name: 'Reason', max: 500 });
+  // "restore" returns a suspended event to whatever it was before (a draft stays a draft and is never published by it).
+  if (requested === 'restore' && e.status !== 'suspended') throw bad('Only a suspended event can be restored.');
+  const status = requested === 'restore' ? e.status_before_suspend || 'draft' : requested;
+  const set = { status };
+  if (status === 'suspended' && e.status !== 'suspended') set.status_before_suspend = e.status;
+  await update('events', { id: e.id }, set);
+  const verb = status === 'suspended' ? 'suspended' : 'restored';
+  for (const s of await find('event_staff', { event_id: e.id })) await pushNotify(s.user_id, 'platform', `${e.name} was ${verb} by platform staff`, reason || '', `#/manage/${e.slug}`);
+  await audit(req.user.id, requested === 'restore' ? 'event.restored' : `event.${status}`, `event:${e.slug}`, { reason, status }, { eventId: e.id }); res.json({ ok: true, status });
 });
 r.get('/admin/audit', async (req, res) => {
   const q = String(req.query.q || '');

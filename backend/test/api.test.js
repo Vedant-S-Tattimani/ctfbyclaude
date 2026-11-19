@@ -174,6 +174,22 @@ test('integrity actions are recorded and revoke solves', async () => {
   assert.equal((await m(`/manage/events/ironveil-2026/incidents/${inc.id}/action`, { method: 'POST', body: { action: 'warn', reason: 'Shared flag' } })).status, 200);
   assert.ok(await findOne('audit_log', { action: 'incident.warn' }));
 });
+test('admin: restoring a suspended event returns it to its previous status, never publishing a draft', async () => {
+  const admin = await login('admin');
+  const status = async (slug) => (await admin(`/manage/events/${slug}`)).data.event.status;
+  // a draft created by an organizer
+  const mira = await login('mira_o');
+  const created = await mira('/manage/events', { method: 'POST', body: { name: 'Draft Only', slug: 'draft-only', starts_at: Date.now() + 86400_000, ends_at: Date.now() + 2 * 86400_000 } });
+  assert.equal(created.status, 200, JSON.stringify(created.data));
+  assert.equal((await admin('/admin/events/draft-only', { method: 'PATCH', body: { status: 'suspended', reason: 'test' } })).status, 200);
+  assert.equal(await status('draft-only'), 'suspended');
+  const r = await admin('/admin/events/draft-only', { method: 'PATCH', body: { status: 'restore' } });
+  assert.equal(r.data.status, 'draft'); assert.equal(await status('draft-only'), 'draft');
+  // a published event comes back published
+  await admin('/admin/events/ironveil-2026', { method: 'PATCH', body: { status: 'suspended', reason: 'test' } });
+  assert.equal((await admin('/admin/events/ironveil-2026', { method: 'PATCH', body: { status: 'restore' } })).data.status, 'published');
+  assert.equal((await admin('/admin/events/ironveil-2026', { method: 'PATCH', body: { status: 'restore' } })).status, 400, 'only suspended events can be restored');
+});
 test('admin: suspend signs the user out; non-admin blocked', async () => {
   const a = await login('admin'); const victim = await login('hoot');
   const id = (await findOne('users', { username: 'hoot' })).id;
