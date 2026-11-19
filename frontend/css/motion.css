@@ -68,6 +68,9 @@ body:has(.lens.on) .you-cursor svg { transform: scale(.6); }
 .comment-card.rv { transform: translateY(18px) scale(.85) rotate(-3deg); transform-origin: 0 100%; }
 .comment-card.rv.in { transform: none; transition-timing-function: var(--spring); }
 .cta-wrap { position: relative; }
+/* Two words on the banner: a bit smaller than the single-word version, and allowed to wrap on phones. */
+.cta-card .plate.community { max-width: calc(100% - 32px); }
+.cta-card .plate.community b { font-size: clamp(28px, 5vw, 72px); white-space: normal; text-align: center; line-height: .95; }
 
 /* ---------- googly eyes trailing the cursor (home page only, see initEyes in js/motion.js) ---------- */
 .eyes-cursor { position: fixed; left: 0; top: 0; z-index: 195; display: flex; gap: 1px; margin: -10px 0 0 -17px; pointer-events: none; will-change: transform; transition: opacity .25s var(--ease); }

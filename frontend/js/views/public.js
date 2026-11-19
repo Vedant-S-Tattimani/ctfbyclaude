@@ -57,6 +57,8 @@ const CATICO = { web: 'grid', crypto: 'lock', rev: 'sparkle', pwn: 'server', for
 function countdownParts(ms) { const s = Math.max(0, Math.floor(ms / 1000)); const d = Math.floor(s / 86400), h = Math.floor((s % 86400) / 3600), m = Math.floor((s % 3600) / 60); return d ? `${d}D ${String(h).padStart(2, '0')}H` : `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`; }
 const BLOB = `<svg viewBox="0 0 200 200" aria-hidden="true"><g class="body"><circle cx="62" cy="62" r="50"/><circle cx="138" cy="62" r="50"/><circle cx="62" cy="138" r="50"/><circle cx="138" cy="138" r="50"/><circle cx="100" cy="100" r="62"/></g>
   <g class="eyes"><rect class="eye" x="78" y="74" width="15" height="34" rx="7.5"/><rect class="eye" x="104" y="74" width="15" height="34" rx="7.5"/></g></svg>`;
+// Community chat the "Join community" banner links to.
+const COMMUNITY_URL = 'https://chat.whatsapp.com/LWTQd0khwsSFiRHOYR1s7r';
 // Hand-drawn line that draws itself as the "how it works" section scrolls in.
 const SCROLL_LINE = '<svg class="scroll-line" viewBox="0 0 1200 260" preserveAspectRatio="none" aria-hidden="true" data-draw><path d="M-30 210 C 160 120, 330 60, 520 110 S 820 250, 960 170 S 1150 30, 1240 70"/></svg>';
 
@@ -135,8 +137,8 @@ rank 9 → 7</div><span class="cap">first blood</span></div>
       <div><span class="hand-title">let's play!${SCRIBBLE}</span><h2 class="big-h" data-letters style="margin-top:14px">Let's play</h2>
         <p>Pick a competition, bring a team or go solo, and watch your flags land on the board in real time.</p></div></div>
     <div class="cta-wrap"><div class="comment-card" data-reveal><div class="lbl">Comment</div><div class="who"><img src="/img/logo.png" alt=""><div><b>fs0cie1y</b>Registration is free for players. Practice sets are open all year.</div></div><span class="react">⚡ ${fmt(meta.stats.users)}</span></div>
-    <a class="cta-card" href="#/${state.me ? 'events' : 'signup'}" aria-label="${state.me ? 'Browse competitions' : 'Create an account'}"><span class="swirl"></span><span class="plate" data-tilt="-7"><span class="dia">»</span><b>${state.me ? 'Compete' : 'Join'}</b><span class="dia">»</span></span></a></div>
-    <p class="mono xs dim" style="text-align:center;margin-top:16px">${state.me ? 'Browse open competitions and register your team.' : 'Free for players. Takes under a minute.'}</p></section>`;
+    <a class="cta-card" href="${COMMUNITY_URL}" target="_blank" rel="noopener noreferrer" aria-label="Join the community on WhatsApp (opens in a new tab)"><span class="swirl"></span><span class="plate community" data-tilt="-7"><span class="dia">»</span><b>Join community</b><span class="dia">»</span></span></a></div>
+    <p class="mono xs dim" style="text-align:center;margin-top:16px">Chat with other players, find teammates and hear about new competitions first, in our WhatsApp group.</p></section>`;
 } });
 
 /* ---------- directory ---------- */
