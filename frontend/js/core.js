@@ -127,14 +127,13 @@ function arenaSide(c) {
     ${a?.team ? `<div class="foot"><div class="label">${esc(a.team.name || 'Solo')}</div><div class="row between" style="margin-top:8px"><span class="dim small">Rank</span><span class="mono">#${a.team.rank} / ${a.team.of}</span></div><div class="row between"><span class="dim small">Points</span><span class="mono">${a.team.points}</span></div><div class="row between"><span class="dim small">Solved</span><span class="mono">${a.team.solved}</span></div></div>` : ''}`;
 }
 function footer() { return `<footer class="footer"><span>fs0cie<b>1y</b> · capture the flag platform · <span data-clock></span></span><span class="row wrap" style="gap:10px 18px"><a href="#/verify">Verify certificate</a><a href="#/orgs">Organizations</a><a href="#/events">Competitions</a><a href="#/manage/new">Host an event</a></span></footer>${rulerHtml(true)}`; }
-const floatCta = (me) => `<a class="float-cta" href="#/${me && me.role !== 'participant' ? 'manage/new' : 'events'}">${icon('heart', 14)}${me && me.role !== 'participant' ? 'Host an event' : 'Find a CTF'}</a>`;
 function shellFor(c, html) {
   const sh = c.r.shell || 'public';
   if (sh === 'bare') return html;
   const r = rulerHtml();
   const d = dockHtml(c.path, state.me);
   if (sh === 'auth') return r + topbar(c) + html + d;
-  if (sh === 'public') return r + topbar(c) + `<main id="main">${html}</main>` + footer() + floatCta(state.me) + d;
+  if (sh === 'public') return r + topbar(c) + `<main id="main">${html}</main>` + footer() + d;
   const side = sh === 'arena' ? arenaSide(c) : appSide(c);
   return r + topbar(c, { menu: true }) + `<div class="app"><aside class="side" aria-label="Section navigation">${side}</aside><main class="main" id="main">${html}</main></div>` + d;
 }

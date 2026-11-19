@@ -136,9 +136,6 @@ code, .prose code { font-family: var(--mono); font-size: .9em; background: var(-
 .btn svg { width: 14px; height: 14px; flex: none; }
 .spin { width: 13px; height: 13px; border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%; animation: spin .7s linear infinite; display: inline-block; }
 @keyframes spin { to { transform: rotate(360deg); } }
-.float-cta { position: fixed; right: 18px; bottom: 18px; z-index: 45; display: inline-flex; align-items: center; gap: 8px; height: 38px; padding: 0 16px; background: #fff; border: 1.5px solid var(--ink); border-radius: 99px; font: 500 11px var(--mono); text-transform: uppercase; box-shadow: 0 6px 24px -6px rgba(0, 0, 0, .25); transition: transform .3s var(--spring), background .2s; animation: rise .6s var(--spring) .6s both; }
-.float-cta:hover { transform: translateY(-3px) rotate(-2deg); background: var(--yellow); }
-.float-cta svg { width: 14px; height: 14px; color: var(--berry); }
 @keyframes rise { from { opacity: 0; transform: translateY(30px); } }
 
 /* ---------- form controls ---------- */
@@ -543,8 +540,7 @@ table.t { width: 100%; border-collapse: collapse; font-size: 14px; }
   .menu-btn { display: inline-flex; }
   .topnav { display: none; }
   .floating-dock { display: block; position: fixed; left: 50%; bottom: 12px; transform: translateX(-50%); z-index: 46; }
-  .float-cta, .toasts { bottom: 76px; }
-  .footer { padding-bottom: 90px; }
+    .footer { padding-bottom: 90px; }
   .auth { grid-template-columns: 1fr; } .auth .side-art { display: none; }
   .evrow { grid-template-columns: 10px minmax(0, 1fr) 120px; } .evrow .hide-t { display: none; }
   .c3 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -565,8 +561,7 @@ table.t { width: 100%; border-collapse: collapse; font-size: 14px; }
   .md-split { grid-template-columns: 1fr; } .md-split .textarea { border-right: 0; border-bottom: 1.5px solid var(--ink); }
   .brand { padding: 0 10px; } .brand span.word { display: none; }
   .topbar .tools { padding: 0 8px; gap: 4px; }
-  .hide-m, .ruler-meta .ruler-status-text, .float-cta { display: none !important; }
-  .t th, .t td { padding: 9px 10px; }
+  .hide-m, .ruler-meta .ruler-status-text,   .t th, .t td { padding: 9px 10px; }
   .pop { position: fixed; left: 8px; right: 8px; top: 86px; width: auto; }
   .scrim { padding: 10px; } .dialog { box-shadow: 5px 5px 0 var(--ink); } .dialog .db { padding: 16px; }
   .board { grid-template-columns: 1fr; }

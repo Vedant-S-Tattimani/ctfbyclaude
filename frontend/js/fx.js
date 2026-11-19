@@ -73,7 +73,7 @@ setInterval(tickClocks, 1000);
 /* ---------- magnetic primary buttons & parallax stickers ---------- */
 function magnet(root = document) {
   if (reduce || !finePointer) return;
-  root.querySelectorAll('.btn.lg, .float-cta, [data-magnet]').forEach((b) => {
+  root.querySelectorAll('.btn.lg, [data-magnet]').forEach((b) => {
     if (b.dataset.mag) return; b.dataset.mag = '1';
     b.addEventListener('mousemove', (e) => { const r = b.getBoundingClientRect(); const x = (e.clientX - r.left - r.width / 2) / r.width, y = (e.clientY - r.top - r.height / 2) / r.height; b.style.translate = `${x * 8}px ${y * 8}px`; });
     b.addEventListener('mouseleave', () => { b.style.translate = ''; });
