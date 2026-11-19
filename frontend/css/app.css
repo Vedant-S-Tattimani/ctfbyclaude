@@ -470,6 +470,9 @@ table.t { width: 100%; border-collapse: collapse; font-size: 14px; }
 .evrow .acc { align-self: stretch; }
 .evrow .name { font: 500 21px var(--body); letter-spacing: -0.04em; }
 .panel#evlist { background: transparent; border: 0; }
+/* Public pages: the main area takes the leftover height, so on short pages the footer sits at the bottom of the window. */
+#root:has(> #main) { min-height: 100vh; display: flex; flex-direction: column; }
+#root:has(> #main) > #main { flex: 1 0 auto; }
 .footer { position: relative; margin-top: 40px; padding: 26px 36px; display: flex; justify-content: space-between; gap: 20px; flex-wrap: wrap; font: 500 11px var(--mono); text-transform: uppercase; color: var(--dim); background: #fff; border-top: 1.5px solid var(--ink); }
 .footer a:hover { color: var(--ink); text-decoration: underline; }
 .footer b { color: var(--cyan); }
