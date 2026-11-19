@@ -6,6 +6,7 @@ import './views/me.js';
 import './views/arena.js';
 import './views/manage.js';
 import './views/admin.js';
+import './password.js';
 
 route('.*', { notFound: true, view: () => errorPage(404, "That page doesn't exist.") });
 try { await loadMe(); } catch { /* server unreachable: render anyway */ }

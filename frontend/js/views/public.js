@@ -55,6 +55,13 @@ const KCOL = ['k-cyan', 'k-ink', 'k-yellow', 'k-berry', 'k-green'];
 const CATCOL = { web: 'k-cyan', crypto: 'k-yellow', rev: 'k-berry', pwn: 'k-ink', forensics: 'k-green', osint: 'k-cyan', misc: 'k-yellow', hardware: 'k-berry', stego: 'k-green', network: 'k-ink' };
 const CATICO = { web: 'grid', crypto: 'lock', rev: 'sparkle', pwn: 'server', forensics: 'eye', osint: 'target', misc: 'heart', hardware: 'bulb', stego: 'file', network: 'refresh' };
 function countdownParts(ms) { const s = Math.max(0, Math.floor(ms / 1000)); const d = Math.floor(s / 86400), h = Math.floor((s % 86400) / 3600), m = Math.floor((s % 3600) / 60); return d ? `${d}D ${String(h).padStart(2, '0')}H` : `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`; }
+const BLOB = `<svg viewBox="0 0 200 200" aria-hidden="true"><g class="body"><circle cx="62" cy="62" r="50"/><circle cx="138" cy="62" r="50"/><circle cx="62" cy="138" r="50"/><circle cx="138" cy="138" r="50"/><circle cx="100" cy="100" r="62"/></g>
+  <g class="eyes"><rect class="eye" x="78" y="74" width="15" height="34" rx="7.5"/><rect class="eye" x="104" y="74" width="15" height="34" rx="7.5"/></g></svg>`;
+// Community chat the "Join community" banner links to.
+const COMMUNITY_URL = 'https://chat.whatsapp.com/LWTQd0khwsSFiRHOYR1s7r';
+// Hand-drawn line that draws itself as the "how it works" section scrolls in.
+const SCROLL_LINE = '<svg class="scroll-line" viewBox="0 0 1200 260" preserveAspectRatio="none" aria-hidden="true" data-draw><path d="M-30 210 C 160 120, 330 60, 520 110 S 820 250, 960 170 S 1150 30, 1240 70"/></svg>';
+
 function folderCard(e, i, boards) {
   const k = KCOL[i % KCOL.length]; const sb = boards[e.slug];
   const fileName = e.phase === 'upcoming' ? 'countdown.txt' : e.phase === 'live' ? 'scoreboard.live' : 'results.csv';
@@ -86,31 +93,32 @@ route('/', { title: 'Compete. Exploit. Learn. Conquer.', view: async () => {
     <span class="ghost-cursor" style="right:10%;top:300px;animation-delay:-3s" data-depth="-0.5">${CURSOR('#ecb22e')}<span class="tagl" style="background:var(--yellow);color:var(--ink)">crypto</span></span>
     <span class="ghost-cursor" style="left:14%;top:470px;animation-delay:-6s" data-depth="0.8">${CURSOR('#36c5f0')}<span class="tagl" style="background:var(--cyan);color:var(--ink)">web</span></span>
     ${top.map((t, i) => `<span class="bubble" style="background:${avColor(t.name)};${['left:6%;top:290px', 'right:6%;top:150px', 'right:16%;top:520px'][i]};animation-delay:${-i * 1.6}s" title="#${t.rank} ${esc(t.name)}" data-depth="${0.4 + i * 0.3}">${esc(t.name.replace(/[^A-Za-z0-9]/g, '').slice(0, 2).toUpperCase())}</span>`).join('')}
-    <div class="stage">
+    <div class="stage" data-lens data-lens-size="170">
       <div class="intro">welcome to the${UNDERLINE}</div>
       ${live ? `<a class="sticker mint s1" href="#/events/${esc(live.slug)}" data-depth="0.3">Live now · ${esc(live.name)}</a>` : `<a class="sticker mint s1" href="#/events" data-depth="0.3">${meta.stats.events} competitions listed</a>`}
       <a class="sticker cream s2" href="#/leaderboard" data-depth="-0.3">${fmt(meta.stats.solves)} flags captured so far</a>
       <h1 class="title sel" aria-label="fs0cie1y"><img src="/img/logo.png" alt="">${title}</h1>
       <div class="status"><i></i>${meta.stats.live ? `${meta.stats.live} competition${meta.stats.live > 1 ? 's' : ''} live now` : 'Open for registration'} · ${fmt(meta.stats.users)} players</div>
     </div>
-    <p class="lead">Find ${SHAPE.target} competitions, capture flags ${SHAPE.flower} and climb a scoreboard that moves in real time ${SHAPE.cross}.</p>
+    <p class="lead" data-lens data-lens-size="120">Find ${SHAPE.target} competitions, capture flags ${SHAPE.flower} and climb a scoreboard that moves in real time ${SHAPE.cross}.</p>
     <div class="ctas"><a class="btn primary lg" href="#/events">Browse competitions</a><a class="btn lg" href="#/manage/new">${icon('plus')}Host an event</a></div>
   </section>
   <div class="marquee" aria-hidden="true"><div class="track">${marquee}${marquee}</div></div>
 
   <section class="sec2">
+    ${SCROLL_LINE}
     ${live && top.length ? `<div class="polaroid pol-l" data-depth="0.25"><div class="mini-sb">${top.map((t) => `<div><span>#${t.rank} ${esc(t.name)}</span><span>${fmt(t.points)}</span></div>`).join('')}</div><span class="cap">live board!</span></div>` : ''}
     <div class="polaroid pol-r" data-depth="-0.25"><div class="term" style="font-size:11px;white-space:pre-wrap">$ submit CIPHERARENA{…}
 <span style="color:#2fbc81">✓ correct</span> +250
 rank 9 → 7</div><span class="cap">first blood</span></div>
     <div class="head"><span class="hand-title">how it works!${SCRIBBLE}</span></div>
-    <p class="statement">fs0cie1y is a CTF platform ${SHAPE.diamond} where teams register, solve challenges ${SHAPE.bowtie} and watch every flag land on a live board ${SHAPE.target}.</p>
+    <p class="statement" data-words>fs0cie1y is a CTF platform ${SHAPE.diamond} where teams register, solve challenges ${SHAPE.bowtie} and watch every flag land on a live board ${SHAPE.target}.</p>
     <div class="blocks">${cats.map(([id, [code, name]], i) => `<a class="blk ${CATCOL[id]}" href="#/events">${esc(name)} <small>${meta.byCategory[id] || 0}</small></a>${i % 2 ? '' : `<span class="ico ${CATCOL[(cats[i + 1] || cats[0])[0]]}">${icon(CATICO[id], 22)}</span>`}`).join('')}</div>
     <div class="stats-row">${[['Players', meta.stats.users, 'k-cyan', '-2deg'], ['Competitions', meta.stats.events, 'k-yellow', '1.5deg'], ['Live now', meta.stats.live, 'k-berry', '-1deg'], ['Flags captured', meta.stats.solves, 'k-green', '2deg']].map(([k, v, c, r]) => `<div class="stat-card" style="--rot:${r};--cc:var(--${c.slice(2)})"><div class="label">${k}</div><div class="v">${fmt(v)}</div></div>`).join('')}</div>
   </section>
 
   <section class="sec2" style="padding-top:20px">
-    <div class="head"><span class="hand-title">explore the arena!${SCRIBBLE}</span><div class="label" style="margin-top:20px">Featured competitions</div></div>
+    <div class="head"><span class="hand-title">explore the arena!${SCRIBBLE}</span><h2 class="big-h" data-letters style="margin-top:18px">Featured<br>arenas</h2></div>
     <div class="stack-cards">${showcase.map((e, i) => folderCard(e, i, boards)).join('') || '<div class="empty"><b>No competitions yet.</b>Create the first one.</div>'}</div>
     <div style="text-align:center;margin-top:34px"><a class="btn lg" href="#/events">All competitions ${icon('arrowNE')}</a></div>
   </section>
@@ -124,9 +132,13 @@ rank 9 → 7</div><span class="cap">first blood</span></div>
       <div class="row wrap" style="margin-top:20px"><a class="btn primary" href="#/manage/new">Create an event</a><a class="btn" href="#/orgs">Organizations</a></div></div>
   </div></section>
 
-  <section class="sec2"><div class="head"><span class="hand-title">let's play!${SCRIBBLE}</span></div>
-    <a class="cta-card" href="#/${state.me ? 'events' : 'signup'}" aria-label="${state.me ? 'Browse competitions' : 'Create an account'}"><span class="swirl"></span><span class="plate"><span class="dia">»</span><b>${state.me ? 'Compete' : 'Join'}</b><span class="dia">»</span></span></a>
-    <p class="mono xs dim" style="text-align:center;margin-top:16px">${state.me ? 'Browse open competitions and register your team.' : 'Free for players. Takes under a minute.'}</p></section>`;
+  <section class="sec2">
+    <div class="talk"><div class="blob" data-blob data-lens data-lens-size="190">${BLOB}</div>
+      <div><span class="hand-title">let's play!${SCRIBBLE}</span><h2 class="big-h" data-letters style="margin-top:14px">Let's play</h2>
+        <p>Pick a competition, bring a team or go solo, and watch your flags land on the board in real time.</p></div></div>
+    <div class="cta-wrap"><div class="comment-card" data-reveal><div class="lbl">Comment</div><div class="who"><img src="/img/logo.png" alt=""><div><b>fs0cie1y</b>Registration is free for players. Practice sets are open all year.</div></div><span class="react">⚡ ${fmt(meta.stats.users)}</span></div>
+    <a class="cta-card" href="${COMMUNITY_URL}" target="_blank" rel="noopener noreferrer" aria-label="Join the community on WhatsApp (opens in a new tab)"><span class="swirl"></span><span class="plate community" data-tilt="-7"><span class="dia">»</span><b>Join community</b><span class="dia">»</span></span></a></div>
+    <p class="mono xs dim" style="text-align:center;margin-top:16px">Chat with other players, find teammates and hear about new competitions first, in our WhatsApp group.</p></section>`;
 } });
 
 /* ---------- directory ---------- */
@@ -217,10 +229,12 @@ route('/leaderboard', { title: 'Leaderboard', view: async () => {
 } });
 
 /* ---------- organizations ---------- */
+const orgGrid = (orgs) => `<div class="cells c3">${orgs.map((o) => `<a class="cell" href="#/orgs/${esc(o.slug)}" style="box-shadow:inset 0 3px 0 ${esc(o.accent)}"><div class="row between"><span class="label">${esc(o.kind || 'organization')}</span>${o.verified ? tag('Verified', 'ok') : tag('Unverified')}</div><h3 style="margin-top:12px;font-size:17px">${esc(o.name)}</h3><p class="small dim" style="margin-top:6px">${esc(o.description || '')}</p><div class="row small mono dim" style="margin-top:14px;gap:16px"><span>${o.members} members</span><span>${o.events} events</span></div></a>`).join('')}</div>`;
 route('/orgs', { title: 'Organizations', view: async () => {
   const { orgs } = await api('/orgs');
   return `<div class="page"><div class="pagehead"><div><h1>Organizations</h1><p>Clubs, communities and companies hosting competitions here.</p></div>${state.me ? '<button class="btn" data-act="neworg">Create organization</button>' : ''}</div>
-    <div class="cells c3">${orgs.map((o) => `<a class="cell" href="#/orgs/${esc(o.slug)}" style="box-shadow:inset 0 3px 0 ${esc(o.accent)}"><div class="row between"><span class="label">${esc(o.kind || 'organization')}</span>${o.verified ? tag('Verified', 'ok') : tag('Unverified')}</div><h3 style="margin-top:12px;font-size:17px">${esc(o.name)}</h3><p class="small dim" style="margin-top:6px">${esc(o.description || '')}</p><div class="row small mono dim" style="margin-top:14px;gap:16px"><span>${o.members} members</span><span>${o.events} events</span></div></a>`).join('')}</div></div>`;
+    ${orgs.length ? orgGrid(orgs) : `<div class="panel"><div class="empty"><b>No organizations yet.</b>Clubs, communities and companies that host competitions show up here.${state.me ? '<button class="btn primary" data-act="neworg" style="margin-top:12px">Create the first one</button>' : '<a class="btn" href="#/signup" style="margin-top:12px">Sign up to create one</a>'}</div></div>`}
+    </div>`;
 } });
 onAct('neworg', async () => {
   const r = await dialog({ title: 'Create an organization', body: `<div class="field"><label for="on">Name</label><input id="on" class="input" name="name" required></div><div class="field"><label for="ok">Type</label><select id="ok" class="select" name="kind"><option value="university">University club</option><option value="community">Community</option><option value="company">Company</option><option value="training">Training provider</option></select></div><div class="field"><label for="od">Description</label><textarea id="od" class="textarea" name="description"></textarea></div><p class="xs dim">New organizations start unverified. Platform staff can verify them.</p>`, actions: [{ label: 'Cancel', kind: 'ghost', value: null }, { label: 'Create', kind: 'primary', value: 'go', submit: true }] });

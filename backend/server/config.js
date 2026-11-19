@@ -55,5 +55,24 @@ export const config = {
   trustProxy: process.env.TRUST_PROXY === '1',
   // CORS origin for frontend dev server (empty = same-origin only). Set to http://localhost:5500 etc.
   corsOrigin: process.env.CORS_ORIGIN || '',
+  // Where the SPA lives, for redirects after OAuth sign-in. Same as BASE_URL unless the frontend is served separately.
+  frontendUrl: (process.env.FRONTEND_URL || process.env.BASE_URL || `http://localhost:${process.env.PORT || 3000}`).replace(/\/$/, ''),
+  // OAuth sign-in. A provider is enabled when both its client id and secret are set.
+  // The *_URL overrides exist for GitHub Enterprise and for tests; leave them unset otherwise.
+  oauth: {
+    github: {
+      clientId: process.env.GITHUB_CLIENT_ID || '',
+      clientSecret: process.env.GITHUB_CLIENT_SECRET || '',
+      webBase: (process.env.GITHUB_OAUTH_URL || 'https://github.com').replace(/\/$/, ''),
+      apiBase: (process.env.GITHUB_API_URL || 'https://api.github.com').replace(/\/$/, ''),
+    },
+    google: {
+      clientId: process.env.GOOGLE_CLIENT_ID || '',
+      clientSecret: process.env.GOOGLE_CLIENT_SECRET || '',
+      authUrl: process.env.GOOGLE_AUTH_URL || 'https://accounts.google.com/o/oauth2/v2/auth',
+      tokenUrl: process.env.GOOGLE_TOKEN_URL || 'https://oauth2.googleapis.com/token',
+      userinfoUrl: process.env.GOOGLE_USERINFO_URL || 'https://openidconnect.googleapis.com/v1/userinfo',
+    },
+  },
 };
 fs.mkdirSync(config.uploadDir, { recursive: true });

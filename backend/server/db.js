@@ -21,6 +21,9 @@ const INDEXES = {
   // expire_at (a Date) lets MongoDB delete stale sessions and email tokens on its own.
   sessions: [[{ token_hash: 1 }, { unique: true }], [{ user_id: 1 }], [{ expire_at: 1 }, { expireAfterSeconds: 0 }]],
   email_tokens: [[{ token_hash: 1 }, { unique: true }], [{ expire_at: 1 }, { expireAfterSeconds: 0 }]],
+  // One identity per provider account, and at most one linked account per provider per user.
+  oauth_identities: [[{ provider: 1, subject: 1 }, { unique: true }], [{ user_id: 1, provider: 1 }, { unique: true }]],
+  oauth_states: [[{ state_hash: 1 }, { unique: true }], [{ expire_at: 1 }, { expireAfterSeconds: 0 }]],
   orgs: [[{ id: 1 }, { unique: true }], [{ slug: 1 }, { unique: true }]],
   org_members: [[{ org_id: 1, user_id: 1 }, { unique: true }], [{ user_id: 1 }]],
   events: [[{ id: 1 }, { unique: true }], [{ slug: 1 }, { unique: true }], [{ status: 1, is_practice: 1, starts_at: 1 }]],

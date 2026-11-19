@@ -11,3 +11,7 @@ frontend/.env
 backend/serviceAccountKey.json
 
 .claude/worktrees/
+
+# Practice challenges with secret flags: only the README template is committed.
+backend/scripts/practice/private/*
+!backend/scripts/practice/private/README.md

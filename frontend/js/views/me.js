@@ -94,8 +94,16 @@ route('/certificates', { ...A, title: 'Certificates', view: async () => {
 
 /* ---------- settings ---------- */
 let STAB = 'profile';
-route('/settings', { ...A, title: 'Settings', view: async () => {
+const SEEN = new Set();
+route('/settings', { ...A, title: 'Settings', view: async ({ query }) => {
   const me = state.me; let body = '';
+  // Back from a GitHub/Google link round-trip: open the Security tab and say how it went (once per URL).
+  let oauthNote = '';
+  if (query.tab === 'security' && (query.oauth || query.oauth_error) && !SEEN.has(location.hash)) {
+    SEEN.add(location.hash); STAB = 'security';
+    oauthNote = query.oauth_error ? `<div class="notice err">${icon('x')}<div>${esc(query.oauth_error)}</div></div>`
+      : `<div class="notice ok">${icon('check')}<div>Account linked. You can now sign in with it.</div></div>`;
+  }
   if (STAB === 'profile') body = `<form class="stack" data-form="profile" style="max-width:560px" novalidate>
     <div class="field"><label for="p1">Username</label><input id="p1" class="input mono" name="username" value="${esc(me.username)}" required></div>
     <div class="field"><label for="p2">Display name</label><input id="p2" class="input" name="displayName" value="${esc(me.displayName || '')}" maxlength="40"></div>
@@ -104,19 +112,40 @@ route('/settings', { ...A, title: 'Settings', view: async () => {
     <div class="field" style="border:0;background:none"><label for="p5">Experience</label><select id="p5" class="select" name="experience">${['beginner', 'intermediate', 'advanced', 'professional'].map((x) => `<option ${me.experience === x ? 'selected' : ''}>${x}</option>`).join('')}</select></div></div>
     <div class="form-error"></div><div><button class="btn primary" type="submit">Save profile</button></div></form>`;
   if (STAB === 'security') {
-    const { sessions } = await api('/me/sessions');
-    body = `<div class="stack loose" style="max-width:720px">
+    const [{ sessions }, linked] = await Promise.all([api('/me/sessions'), api('/me/identities')]);
+    body = `<div class="stack loose" style="max-width:720px">${oauthNote}
       <section class="panel"><div class="cell-h"><h3>Email</h3>${me.emailVerified ? tag('Verified', 'ok') : tag('Not verified', 'warn')}</div><div class="cell row between"><span class="mono">${esc(me.email)}</span>${me.emailVerified ? '' : '<a class="btn sm" href="#/verify-email">Verify</a>'}</div></section>
       <section class="panel"><div class="cell-h"><h3>Two-factor authentication</h3>${me.totpEnabled ? tag('On', 'ok') : tag('Off', 'warn')}</div><div class="cell" id="totp">${me.totpEnabled ? `<p class="dim small">Sign-ins ask for a code from your authenticator app.</p><button class="btn danger sm" data-act="2fa-off" style="margin-top:12px">Turn off</button>` : `<p class="dim small">Protect your account with an authenticator app (any TOTP app works).</p><button class="btn primary sm" data-act="2fa-setup" style="margin-top:12px">Set up two-factor</button>`}</div></section>
-      <section class="panel"><div class="cell-h"><h3>Password</h3></div><form class="cell stack" data-form="password" novalidate><div class="field"><label for="w1">Current password</label><input id="w1" class="input" type="password" name="current" autocomplete="current-password" required></div><div class="field"><label for="w2">New password</label><input id="w2" class="input" type="password" name="next" autocomplete="new-password" minlength="10" required></div><div class="form-error"></div><div><button class="btn" type="submit">Change password</button></div><p class="xs faint">Other sessions are signed out when you change it.</p></form></section>
+      ${linkedPanel(linked)}
+      <section class="panel"><div class="cell-h"><h3>Password</h3>${me.hasPassword ? '' : tag('Not set', 'warn')}</div><form class="cell stack" data-form="password" novalidate>${me.hasPassword ? '<div class="field"><label for="w1">Current password</label><input id="w1" class="input" type="password" name="current" autocomplete="current-password" required></div>' : '<p class="dim small">You sign in with a linked account. Set a password to also sign in with your username or email.</p>'}<div class="field"><label for="w2">New password</label><input id="w2" class="input" type="password" name="next" autocomplete="new-password" minlength="10" required></div><div class="form-error"></div><div><button class="btn" type="submit">${me.hasPassword ? 'Change password' : 'Set password'}</button></div><p class="xs faint">Other sessions are signed out when you change it.</p></form></section>
       <section class="panel"><div class="cell-h"><h3>Sessions</h3><button class="btn sm danger" data-act="sess-others">Sign out other sessions</button></div><div class="tablewrap"><table class="t"><tbody>${sessions.map((s) => `<tr><td class="small trunc" style="max-width:280px">${esc(s.ua || 'Unknown device')}</td><td class="mono small dim">${esc(s.ip || '')}</td><td class="small dim">${s.current ? tag('This device', 'ok') : `active ${ago(s.lastUsed)}`}</td><td class="r">${s.current ? '' : `<button class="btn ghost sm" data-act="sess-kill" data-id="${s.id}">Sign out</button>`}</td></tr>`).join('')}</tbody></table></div></section></div>`;
   }
-  return `<div class="page"><div class="pagehead"><div><h1>Settings</h1><p>Profile, password, two-factor and active sessions.</p></div></div>
+  return `<div class="page"><div class="pagehead"><div><h1>Settings</h1><p>Profile, password, linked accounts, two-factor and active sessions.</p></div></div>
     <div class="tabs" style="margin-bottom:24px">${[['profile', 'Profile'], ['security', 'Security']].map(([k, l]) => `<button class="${STAB === k ? 'on' : ''}" data-act="stab" data-k="${k}">${l}</button>`).join('')}</div>${body}</div>`;
 } });
 onAct('stab', (el) => { STAB = el.dataset.k; refresh(); });
+function linkedPanel({ providers, identities }) {
+  if (!providers.length && !identities.length) return '';
+  const byId = new Map(identities.map((x) => [x.provider, x]));
+  const ids = [...new Set([...providers.map((p) => p.id), ...identities.map((x) => x.provider)])];
+  const label = (id) => providers.find((p) => p.id === id)?.label || byId.get(id)?.label || id;
+  return `<section class="panel"><div class="cell-h"><h3>Linked accounts</h3></div><div class="tablewrap"><table class="t"><tbody>${ids.map((id) => {
+    const x = byId.get(id);
+    const action = x ? `<button class="btn ghost sm" data-act="oauth-unlink" data-p="${esc(id)}">Unlink</button>`
+      : providers.some((p) => p.id === id) ? `<button class="btn sm" data-act="oauth-link" data-p="${esc(id)}">Link</button>` : '';
+    return `<tr><td><b>${esc(label(id))}</b></td><td class="small dim">${x ? `<span class="mono">${esc(x.login || x.email || '')}</span> · linked ${ago(x.createdAt)}` : 'Not linked'}</td><td class="r">${action}</td></tr>`;
+  }).join('')}</tbody></table></div></section>`;
+}
+onAct('oauth-link', async (el) => {
+  const r = await api(`/auth/oauth/${encodeURIComponent(el.dataset.p)}/start`, { method: 'POST', body: { mode: 'link' } });
+  location.href = r.url;
+});
+onAct('oauth-unlink', async (el) => {
+  if (!(await confirmDlg('Unlink this account?', 'You will no longer be able to sign in with it.', 'Unlink', true))) return;
+  await api(`/me/identities/${encodeURIComponent(el.dataset.p)}`, { method: 'DELETE' }); toast('Account unlinked.'); refresh();
+});
 onForm('profile', async (f) => { if (!f.country) delete f.country; await api('/me', { method: 'PATCH', body: f }); await loadMe(); toast('Profile saved.'); refresh(); });
-onForm('password', async (f, fm) => { await api('/me/password', { method: 'POST', body: f }); fm.reset(); toast('Password changed. Other sessions were signed out.'); refresh(); });
+onForm('password', async (f, fm) => { await api('/me/password', { method: 'POST', body: f }); fm.reset(); await loadMe(); toast('Password saved. Other sessions were signed out.'); refresh(); });
 onAct('sess-others', async () => { const r = await api('/me/sessions/revoke-others', { method: 'POST' }); toast(`Signed out ${r.revoked} other session${r.revoked === 1 ? '' : 's'}.`); refresh(); });
 onAct('sess-kill', async (el) => { await api(`/me/sessions/${el.dataset.id}`, { method: 'DELETE' }); toast('Session signed out.'); refresh(); });
 onAct('2fa-setup', async () => {
@@ -126,6 +155,6 @@ onAct('2fa-setup', async () => {
 });
 onForm('2fa-enable', async (f) => { await api('/me/2fa/enable', { method: 'POST', body: f }); await loadMe(); toast('Two-factor authentication is on.'); refresh(); });
 onAct('2fa-off', async () => {
-  const r = await dialog({ title: 'Turn off two-factor?', body: `<p class="dim">Confirm with your password and a current code.</p><div class="field"><label for="x1">Password</label><input id="x1" class="input" type="password" name="password" required></div><div class="field"><label for="x2">Code</label><input id="x2" class="input mono" name="code" inputmode="numeric" maxlength="6" required></div>`, actions: [{ label: 'Cancel', kind: 'ghost', value: null }, { label: 'Turn off', kind: 'danger', value: 'go', submit: true }] });
+  const r = await dialog({ title: 'Turn off two-factor?', body: `<p class="dim">Confirm with ${state.me.hasPassword ? 'your password and ' : ''}a current code.</p>${state.me.hasPassword ? '<div class="field"><label for="x1">Password</label><input id="x1" class="input" type="password" name="password" required></div>' : ''}<div class="field"><label for="x2">Code</label><input id="x2" class="input mono" name="code" inputmode="numeric" maxlength="6" required></div>`, actions: [{ label: 'Cancel', kind: 'ghost', value: null }, { label: 'Turn off', kind: 'danger', value: 'go', submit: true }] });
   if (r.value !== 'go') return; await api('/me/2fa/disable', { method: 'POST', body: Object.fromEntries(r.form) }); await loadMe(); toast('Two-factor authentication is off.'); refresh();
 });

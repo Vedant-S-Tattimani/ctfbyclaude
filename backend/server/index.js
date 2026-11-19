@@ -15,6 +15,7 @@ import eventRoutes from './routes/events.js';
 import teamRoutes from './routes/teams.js';
 import manageRoutes from './routes/manage.js';
 import platformRoutes from './routes/platform.js';
+import oauthRoutes from './routes/oauth.js';
 
 export function createApp() {
   const app = express();
@@ -48,7 +49,7 @@ export function createApp() {
 
   app.use('/api', (_req, _res, next) => requestCache.run(new Map(), next));
   app.use('/api', express.json({ limit: '200kb' }), sessionMiddleware, csrfGuard, (req, res, next) => { res.setHeader('Cache-Control', 'no-store'); next(); });
-  app.use('/api', authRoutes, eventRoutes, teamRoutes, manageRoutes, platformRoutes);
+  app.use('/api', authRoutes, oauthRoutes, eventRoutes, teamRoutes, manageRoutes, platformRoutes);
   app.get('/api/health', (_req, res) => res.json({ ok: true }));
   app.use('/api', (_req, _res, next) => next(new HttpError(404, 'Unknown API route.')));
 

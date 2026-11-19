@@ -1,0 +1,105 @@
+/* Motion layer for js/motion.js: inverting lens, scroll reveals, scroll-drawn lines, tilt-to-flat, blob mascot,
+   section-coloured cursor, comment card. Tokens come from app.css. */
+
+/* ---------- inverting lens: a white box blended with "difference" turns what's under it into its negative ---------- */
+.lens { --ls: 150px; position: fixed; left: 0; top: 0; z-index: 190; width: 0; height: 0; pointer-events: none; mix-blend-mode: difference; will-change: transform; }
+.lens .box { position: absolute; left: calc(var(--ls) / -2); top: calc(var(--ls) / -2); width: var(--ls); height: var(--ls); background: #fff;
+  transform: scale(0); border-radius: 0; transition: transform .45s var(--spring), border-radius .35s var(--ease), width .35s var(--ease), height .35s var(--ease), left .35s var(--ease), top .35s var(--ease); }
+.lens.on .box { transform: scale(1); }
+.lens.round .box { border-radius: 50%; }
+/* selection handles on the corners (white, so they show black after the blend) */
+.lens .box i { position: absolute; width: 9px; height: 9px; background: #fff; transition: border-radius .35s var(--ease); }
+.lens .box i:nth-child(1) { left: -5px; top: -5px; } .lens .box i:nth-child(2) { right: -5px; top: -5px; }
+.lens .box i:nth-child(3) { left: -5px; bottom: -5px; } .lens .box i:nth-child(4) { right: -5px; bottom: -5px; }
+.lens.round .box i { border-radius: 50%; }
+.lens.round .box i:nth-child(1) { left: 10%; top: 10%; } .lens.round .box i:nth-child(2) { right: 10%; top: 10%; }
+.lens.round .box i:nth-child(3) { left: 10%; bottom: 10%; } .lens.round .box i:nth-child(4) { right: 10%; bottom: 10%; }
+/* the YOU cursor shrinks to a dot while the lens is open, like a selection tool */
+body:has(.lens.on) .you-cursor svg { transform: scale(.6); }
+
+/* ---------- cursor tag takes a contrasting colour on coloured sections ---------- */
+.you-cursor .tagl { background: var(--cur-bg, var(--ink)); color: var(--cur-fg, #fff); }
+.you-cursor[data-on='k-cyan'] { --cur-bg: var(--berry); --cur-fg: #fff; }
+.you-cursor[data-on='k-yellow'] { --cur-bg: #2b4bd8; --cur-fg: #fff; }
+.you-cursor[data-on='k-berry'] { --cur-bg: var(--green); --cur-fg: #fff; }
+.you-cursor[data-on='k-green'] { --cur-bg: var(--ink); --cur-fg: #fff; }
+.you-cursor[data-on='k-ink'] { --cur-bg: #fff; --cur-fg: var(--ink); }
+.you-cursor[data-on] .tagl { transform: scale(1.06); }
+
+/* ---------- words / letters lit by scroll ---------- */
+[data-words] .w { color: rgba(17, 18, 18, .16); transition: color .35s var(--ease), opacity .35s var(--ease); }
+[data-words] svg.w, [data-words] .w svg { opacity: .2; transition: opacity .35s var(--ease), transform .45s var(--spring); }
+[data-words] .w.lit { color: var(--ink); }
+[data-words] svg.w.lit, [data-words] .w.lit svg { opacity: 1; }
+[data-words] svg.w.lit { transform: rotate(-8deg) scale(1.1); }
+
+.big-h { font: 1000 clamp(52px, 10vw, 150px)/.86 var(--display); text-transform: uppercase; letter-spacing: -0.02em; text-align: center; }
+[data-letters] .l { display: inline-block; color: transparent; -webkit-text-stroke: 1.5px rgba(17, 18, 18, .28); transform: translateY(.06em); transition: color .3s var(--ease), -webkit-text-stroke-color .3s var(--ease), transform .45s var(--spring); }
+[data-letters] .l.lit { color: var(--ink); -webkit-text-stroke-color: var(--ink); transform: none; }
+
+/* ---------- hand-drawn line drawn by scroll ---------- */
+.scroll-line { position: absolute; left: 0; right: 0; top: -40px; width: 100%; height: 260px; pointer-events: none; overflow: visible; z-index: 0; }
+.scroll-line path { fill: none; stroke: var(--ink); stroke-width: 1.6; stroke-linecap: round; }
+.sec2 > :not(.scroll-line) { position: relative; z-index: 1; }
+
+/* ---------- straighten from a tilt as it scrolls in (individual rotate composes with hover transforms) ---------- */
+[data-tilt] { rotate: var(--tilt-now, 0deg); transition: rotate .2s linear; }
+
+/* ---------- "let's play" row: blob mascot + big heading + comment card ---------- */
+.talk { display: grid; grid-template-columns: minmax(0, .8fr) minmax(0, 1.2fr); align-items: center; gap: 30px; margin-bottom: 50px; }
+.talk .big-h { text-align: left; font-size: clamp(48px, 8vw, 120px); }
+.talk p { margin-top: 16px; max-width: 44ch; color: var(--ink-2, #3b3d3d); }
+.blob { position: relative; justify-self: center; width: min(300px, 70vw); aspect-ratio: 1; transition: transform .6s var(--spring); }
+.blob svg { width: 100%; height: 100%; overflow: visible; }
+.blob .body { fill: var(--green); animation: blobWobble 7s var(--ease) infinite; transform-origin: 50% 50%; }
+.blob .eyes { transform: translate(var(--ex, 0), var(--ey, 0)); transition: transform .18s var(--ease); }
+.blob .eye { fill: var(--ink); transform-box: fill-box; transform-origin: center; animation: blobBlink 4.6s infinite; }
+.blob:hover { transform: rotate(-14deg) scale(1.04); }
+.blob:hover .eye { animation: none; transform: scaleY(.35); }
+@keyframes blobWobble { 0%, 100% { transform: rotate(0) scale(1); } 33% { transform: rotate(4deg) scale(1.02, .98); } 66% { transform: rotate(-3deg) scale(.98, 1.02); } }
+@keyframes blobBlink { 0%, 92%, 100% { transform: scaleY(1); } 95% { transform: scaleY(.1); } }
+
+.comment-card { position: absolute; left: 3%; top: -36px; z-index: 3; width: 270px; background: #fff; border: 1px solid var(--line, #e3e3e3); border-radius: 12px; padding: 12px 14px; box-shadow: 0 18px 40px -18px rgba(0, 0, 0, .35); font-size: 13px; }
+.comment-card .lbl { font: 500 11px var(--mono); color: var(--ink-3, #8a8c8c); padding-bottom: 8px; border-bottom: 1px solid var(--line, #e3e3e3); margin-bottom: 10px; }
+.comment-card .who { display: flex; gap: 10px; }
+.comment-card .who img { width: 28px; height: 28px; border-radius: 50%; border: 1.5px solid var(--ink); flex: none; }
+.comment-card b { display: block; font-size: 13px; }
+.comment-card .react { display: inline-flex; align-items: center; gap: 4px; margin-top: 10px; margin-left: 38px; padding: 2px 8px; border: 1px solid var(--cyan); border-radius: 6px; background: #eaf8fd; font: 500 11px var(--mono); }
+.comment-card.rv { transform: translateY(18px) scale(.85) rotate(-3deg); transform-origin: 0 100%; }
+.comment-card.rv.in { transform: none; transition-timing-function: var(--spring); }
+.cta-wrap { position: relative; }
+/* Two words on the banner: a bit smaller than the single-word version, and allowed to wrap on phones. */
+.cta-card .plate.community { max-width: calc(100% - 32px); }
+.cta-card .plate.community b { font-size: clamp(28px, 5vw, 72px); white-space: normal; text-align: center; line-height: .95; }
+
+/* ---------- googly eyes trailing the cursor (home page only, see initEyes in js/motion.js) ---------- */
+.eyes-cursor { position: fixed; left: 0; top: 0; z-index: 195; display: flex; gap: 1px; margin: -10px 0 0 -17px; pointer-events: none; will-change: transform; transition: opacity .25s var(--ease); }
+.eyes-cursor .eye { position: relative; display: grid; place-items: center; width: 17px; height: 20px; border-radius: 50%; background: #fff; border: 1.5px solid var(--ink);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, .18); transform-origin: center; animation: eyesBlink 5.2s infinite; transition: scale .25s var(--spring); }
+.eyes-cursor .eye:nth-child(2) { animation-delay: .04s; }
+.eyes-cursor .eye i { width: 9px; height: 10px; border-radius: 50%; background: var(--ink); }
+.eyes-cursor.hide { opacity: 0; }
+/* On the home page the eyes are the cursor companion, so the YOU tag would be a second cursor. */
+body:has(.hero2) .you-cursor { display: none; }
+/* Home page cursor: a crosshair (hotspot at its centre), kept on links and buttons too; text fields keep the I-beam. */
+body:has(.hero2), body:has(.hero2) * { cursor: url('/img/crosshair.svg') 16 16, crosshair; }
+body:has(.hero2) input, body:has(.hero2) textarea { cursor: text; }
+.eyes-cursor.hide .eye { scale: .4; }
+@keyframes eyesBlink { 0%, 93%, 100% { transform: scaleY(1); } 96% { transform: scaleY(.08); } }
+
+/* ---------- gentle drift on hero stickers ---------- */
+.hero2 .sticker { animation: stickerDrift 9s var(--ease) infinite; }
+.hero2 .sticker.s2 { animation-delay: -4.5s; animation-duration: 11s; }
+@keyframes stickerDrift { 0%, 100% { translate: 0 0; } 50% { translate: 6px -8px; } }
+
+@media (max-width: 960px) {
+  .talk { grid-template-columns: 1fr; text-align: center; }
+  .talk .big-h { text-align: center; }
+  .talk p { margin-inline: auto; }
+  .comment-card { position: relative; left: auto; top: auto; margin: 0 auto 16px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .lens, .eyes-cursor { display: none; }
+  .blob .body, .blob .eye, .hero2 .sticker { animation: none; }
+  [data-tilt] { rotate: 0deg; }
+}

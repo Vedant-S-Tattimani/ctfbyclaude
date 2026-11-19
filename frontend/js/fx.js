@@ -2,6 +2,7 @@
 // count-ups, live clocks, magnetic buttons, parallax stickers and confetti.
 // Everything degrades to static content with prefers-reduced-motion or touch input.
 import { CURSOR } from './ui.js';
+import { motion } from './motion.js';
 
 const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
 const finePointer = matchMedia('(pointer: fine)').matches;
@@ -18,6 +19,10 @@ function initCursor() {
     tx = e.clientX; ty = e.clientY; cursorEl.classList.remove('hide');
     const t = e.target.closest?.('a,button,[data-act],input,select,textarea,label');
     cursorEl.classList.toggle('on-link', !!t);
+    // On a coloured folder card the tag switches to a contrasting colour (see css/motion.css).
+    const card = e.target.closest?.('.fcard');
+    const k = card ? [...card.classList].find((c) => c.startsWith('k-')) || 'k-cyan' : '';
+    if (cursorEl.dataset.on !== k) { if (k) cursorEl.dataset.on = k; else delete cursorEl.dataset.on; }
     const field = e.target.closest?.('input,textarea,select');
     cursorEl.style.opacity = field ? '0' : '';
     const mark = document.getElementById('ruler-mark');
@@ -99,7 +104,7 @@ export function confetti(x = innerWidth / 2, y = innerHeight / 2) {
 
 /* ---------- run after every render ---------- */
 export function enhance(root = document.getElementById('root')) {
-  reveal(root); countUp(root); magnet(root); parallax(root); tickClocks();
+  reveal(root); countUp(root); magnet(root); parallax(root); motion(root); tickClocks();
 }
 initCursor();
 new MutationObserver(() => { clearTimeout(enhance.t); enhance.t = setTimeout(() => enhance(), 30); }).observe(document.getElementById('root'), { childList: true, subtree: true });
