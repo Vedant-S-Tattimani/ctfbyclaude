@@ -135,9 +135,50 @@ function initBlobTracking() {
   }, { passive: true });
 }
 
+/* ---------- googly eyes that trail the cursor (home page only) ---------- */
+// A spring pulls the eyes toward a spot just above-left of the pointer; the pupils always look at the pointer.
+const EYES_OFFSET_X = -20, EYES_OFFSET_Y = -26;
+const EYES_STIFFNESS = 0.09, EYES_DAMPING = 0.72;
+const PUPIL_TRAVEL = 3.5;
+let eyesEl = null, eyesHome = false;
+function initEyes() {
+  if (reduce || !finePointer) return;
+  eyesEl = document.createElement('div');
+  eyesEl.className = 'eyes-cursor hide'; eyesEl.setAttribute('aria-hidden', 'true');
+  eyesEl.innerHTML = '<span class="eye"><i></i></span><span class="eye"><i></i></span>';
+  document.body.appendChild(eyesEl);
+  const pupils = [...eyesEl.querySelectorAll('i')];
+  let mx = -500, my = -500, ex = -500, ey = -500, vx = 0, vy = 0, seen = false, blocked = false;
+  addEventListener('mousemove', (e) => {
+    mx = e.clientX; my = e.clientY;
+    if (!seen) { ex = mx + EYES_OFFSET_X; ey = my + EYES_OFFSET_Y; seen = true; }
+    // Never two pairs of eyes at once, and stay out of the way of typing.
+    blocked = !!e.target.closest?.('[data-blob], input, textarea, select');
+  }, { passive: true });
+  document.addEventListener('mouseleave', () => { seen = false; });
+  const loop = () => {
+    const show = eyesHome && seen && !blocked && !lens?.classList.contains('on');
+    eyesEl.classList.toggle('hide', !show);
+    if (show) {
+      vx = (vx + (mx + EYES_OFFSET_X - ex) * EYES_STIFFNESS) * EYES_DAMPING;
+      vy = (vy + (my + EYES_OFFSET_Y - ey) * EYES_STIFFNESS) * EYES_DAMPING;
+      ex += vx; ey += vy;
+      const tilt = Math.max(-14, Math.min(14, vx * 0.8));
+      eyesEl.style.transform = `translate3d(${ex}px, ${ey}px, 0) rotate(${tilt}deg)`;
+      const dx = mx - ex, dy = my - ey, d = Math.hypot(dx, dy) || 1;
+      const px = (dx / d) * PUPIL_TRAVEL, py = (dy / d) * PUPIL_TRAVEL;
+      pupils.forEach((p) => { p.style.transform = `translate(${px}px, ${py}px)`; });
+    }
+    requestAnimationFrame(loop);
+  };
+  loop();
+}
+
 export function motion(root = document) {
   collectScroll(root);
   blobs = [...document.querySelectorAll('[data-blob]')];
+  eyesHome = !!document.querySelector('.hero2'); // the home page is the only view with the hero
 }
 initLens();
 initBlobTracking();
+initEyes();

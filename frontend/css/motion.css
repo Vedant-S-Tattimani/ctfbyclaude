@@ -69,6 +69,16 @@ body:has(.lens.on) .you-cursor svg { transform: scale(.6); }
 .comment-card.rv.in { transform: none; transition-timing-function: var(--spring); }
 .cta-wrap { position: relative; }
 
+/* ---------- googly eyes trailing the cursor (home page only, see initEyes in js/motion.js) ---------- */
+.eyes-cursor { position: fixed; left: 0; top: 0; z-index: 195; display: flex; gap: 1px; margin: -10px 0 0 -17px; pointer-events: none; will-change: transform; transition: opacity .25s var(--ease); }
+.eyes-cursor .eye { position: relative; display: grid; place-items: center; width: 17px; height: 20px; border-radius: 50%; background: #fff; border: 1.5px solid var(--ink);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, .18); transform-origin: center; animation: eyesBlink 5.2s infinite; transition: scale .25s var(--spring); }
+.eyes-cursor .eye:nth-child(2) { animation-delay: .04s; }
+.eyes-cursor .eye i { width: 8px; height: 9px; border-radius: 50%; background: var(--ink); transition: transform .08s linear; }
+.eyes-cursor.hide { opacity: 0; }
+.eyes-cursor.hide .eye { scale: .4; }
+@keyframes eyesBlink { 0%, 93%, 100% { transform: scaleY(1); } 96% { transform: scaleY(.08); } }
+
 /* ---------- gentle drift on hero stickers ---------- */
 .hero2 .sticker { animation: stickerDrift 9s var(--ease) infinite; }
 .hero2 .sticker.s2 { animation-delay: -4.5s; animation-duration: 11s; }
@@ -81,7 +91,7 @@ body:has(.lens.on) .you-cursor svg { transform: scale(.6); }
   .comment-card { position: relative; left: auto; top: auto; margin: 0 auto 16px; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .lens { display: none; }
+  .lens, .eyes-cursor { display: none; }
   .blob .body, .blob .eye, .hero2 .sticker { animation: none; }
   [data-tilt] { rotate: 0deg; }
 }
