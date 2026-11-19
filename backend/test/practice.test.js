@@ -14,7 +14,7 @@ const { connectDb, closeDb, dropDb, count, find } = await import('../server/db.j
 const { createApp } = await import('../server/index.js');
 const { loadFixtures, PASSWORD } = await import('./fixtures.js');
 const { base32Decode } = await import('../server/lib.js');
-const { buildChallenges, seedPractice, PRACTICE_SLUG } = await import('../scripts/seed-practice.js');
+const { buildChallenges, loadPrivate, seedPractice, PRACTICE_SLUG } = await import('../scripts/seed-practice.js');
 
 /* ---------- helpers a player would write ---------- */
 const codeBlock = (md) => md.match(/```\n?([\s\S]*?)```/)[1].trim();
@@ -132,7 +132,12 @@ const SOLVERS = {
   },
 };
 
-const challenges = buildChallenges();
+const challenges = await buildChallenges();
+// Challenges in the gitignored practice/private folder may bring their own solvers.
+const { solvers: privateSolvers } = await loadPrivate();
+const ALL_SOLVERS = { ...SOLVERS, ...privateSolvers };
+// Public challenges must always have a solver here; private ones are checked only if they ship one.
+const SOLVERS_REQUIRED = new Set(Object.keys(SOLVERS));
 
 test('every category has at least two practice challenges', () => {
   const by = {}; for (const c of challenges) by[c.category] = (by[c.category] || 0) + 1;
@@ -140,8 +145,10 @@ test('every category has at least two practice challenges', () => {
   assert.equal(new Set(challenges.map((c) => c.name)).size, challenges.length, 'names are unique');
 });
 for (const c of challenges) {
-  test(`solvable from description and files: ${c.category}/${c.name}`, () => {
-    const solve = SOLVERS[c.name]; assert.ok(solve, 'has a solver');
+  const solve = ALL_SOLVERS[c.name];
+  const skip = !solve && !SOLVERS_REQUIRED.has(c.name) ? 'private challenge without a solver' : false;
+  test(`solvable from description and files: ${c.category}/${c.name}`, { skip }, () => {
+    assert.ok(solve, 'has a solver');
     const got = solve(c);
     assert.ok(got, 'solver produced an answer');
     assert.equal(c.ci ? got.toLowerCase() : got, c.ci ? c.flag.toLowerCase() : c.flag);

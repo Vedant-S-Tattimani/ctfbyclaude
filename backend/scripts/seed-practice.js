@@ -1,11 +1,12 @@
 // Creates the always-open practice set and fills it with challenges from every category.
 // Safe to run again: the event is created once, and challenges already in it (matched by name) are left alone,
-// so new challenges added to practice/challenges-*.js are picked up on the next run.
+// so new challenges added to practice/challenges-*.js or practice/private/*.js are picked up on the next run.
+// New challenges whose flags must stay secret go in practice/private/ (gitignored; see the README there).
 // Run: npm run seed:practice
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { config } from '../server/config.js';
 import { connectDb, closeDb, col, findOne, find, insert, now, audit } from '../server/db.js';
 import { setStaticFlag } from '../server/core.js';
@@ -17,9 +18,31 @@ const POINTS_BY_DIFFICULTY = { 1: 50, 2: 100, 3: 200, 4: 300, 5: 400 };
 const LEVEL = { 1: 'beginner', 2: 'easy', 3: 'medium', 4: 'hard', 5: 'insane' };
 const TEN_YEARS_MS = 10 * 365 * 86400_000;
 
-/** All practice challenges with their files, built fresh. */
-export function buildChallenges() {
-  return [...PART_A, ...PART_B].map((build) => build());
+const PRIVATE_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), 'practice', 'private');
+
+/** Challenges kept in the gitignored practice/private folder (secret flags). See practice/private/README.md. */
+export async function loadPrivate() {
+  const builders = [], solvers = {};
+  if (!fs.existsSync(PRIVATE_DIR)) return { builders, solvers };
+  for (const name of fs.readdirSync(PRIVATE_DIR).filter((f) => f.endsWith('.js')).sort()) {
+    const mod = await import(pathToFileURL(path.join(PRIVATE_DIR, name)).href);
+    if (!Array.isArray(mod.challenges)) throw new Error(`practice/private/${name} must export a "challenges" array.`);
+    builders.push(...mod.challenges);
+    Object.assign(solvers, mod.solvers || {});
+  }
+  return { builders, solvers };
+}
+
+/** All practice challenges (public and private) with their files, built fresh. */
+export async function buildChallenges() {
+  const { builders } = await loadPrivate();
+  const all = [...PART_A, ...PART_B, ...builders].map((build) => build());
+  const seen = new Set();
+  for (const c of all) {
+    if (seen.has(c.name)) throw new Error(`Two practice challenges are named "${c.name}". Names must be unique.`);
+    seen.add(c.name);
+  }
+  return all;
 }
 
 async function practiceOwner() {
@@ -76,7 +99,7 @@ export async function seedPractice({ log = console.log } = {}) {
   const { event, created } = await ensureEvent(ownerId);
   const have = new Set((await find('challenges', { event_id: event.id }, { projection: { name: 1 } })).map((c) => c.name));
   const added = [], skipped = [];
-  for (const c of buildChallenges()) {
+  for (const c of await buildChallenges()) {
     if (have.has(c.name)) { skipped.push(c.name); continue; }
     await addChallenge(event, ownerId, c);
     added.push(`${c.category}/${c.name}`);

@@ -94,6 +94,7 @@ test/api.test.js    end-to-end API tests (fixtures in test/fixtures.js)
 test/oauth.test.js  OAuth sign-in tests against a fake GitHub
 test/practice.test.js solves each practice challenge from its description and files only
 scripts/seed-practice.js + scripts/practice/  practice challenges and their generated files (PNG, pcap, UART capture)
+scripts/practice/private/  gitignored: new practice challenges whose flags must stay out of the public repo (see its README)
 ```
 
 ## Not included
