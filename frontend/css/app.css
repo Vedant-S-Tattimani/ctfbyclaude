@@ -148,6 +148,12 @@ code, .prose code { font-family: var(--mono); font-size: .9em; background: var(-
 .input, .select, .textarea { width: 100%; height: 40px; padding: 0 12px; background: #fff; border: 1.5px solid var(--rule-2); border-radius: 2px; color: var(--ink); font-size: 14px; transition: border-color .2s, box-shadow .2s; }
 .textarea { height: auto; min-height: 96px; padding: 10px 12px; line-height: 1.55; resize: vertical; }
 .input:hover, .select:hover, .textarea:hover { border-color: var(--grey); }
+.pw-wrap { position: relative; display: block; width: 100%; }
+.pw-wrap .input { padding-right: 44px; }
+.pw-toggle { position: absolute; right: 4px; top: 50%; translate: 0 -50%; display: grid; place-items: center; width: 34px; height: 30px; border: 0; border-radius: 2px; background: transparent; color: var(--dim); cursor: pointer; transition: color .2s, background .2s; }
+.pw-toggle:hover { color: var(--ink); background: var(--raise); }
+.pw-toggle:focus-visible { outline: 2px solid var(--cyan); outline-offset: 1px; color: var(--ink); }
+.pw-toggle[aria-pressed="true"] { color: var(--ink); }
 .input:focus, .select:focus, .textarea:focus { outline: none; border-color: var(--ink); box-shadow: 3px 3px 0 var(--cyan); }
 .input.mono, .textarea.mono { font-family: var(--mono); font-size: 13px; }
 .input.flag { height: 52px; font: 500 16px var(--mono); }
