@@ -20,7 +20,8 @@ export const randomCode = (len = 10) => {
 };
 export const slugify = (s) => String(s).toLowerCase().normalize('NFKD').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 60);
 export const hashPassword = (p) => bcrypt.hashSync(p, 11);
-export const checkPassword = (p, h) => bcrypt.compareSync(p, h);
+// Accounts created through OAuth have no password hash until the user sets one.
+export const checkPassword = (p, h) => (typeof h === 'string' && h ? bcrypt.compareSync(p, h) : false);
 export const safeEqual = (a, b) => { const A = Buffer.from(String(a)), B = Buffer.from(String(b)); return A.length === B.length && crypto.timingSafeEqual(A, B); };
 
 /* ---------- validation ---------- */
@@ -139,7 +140,7 @@ export function publicUser(u) {
   return { id: u.id, username: u.username, displayName: u.display_name, role: u.role, country: u.country, bio: u.bio, experience: u.experience, createdAt: u.created_at };
 }
 export function selfUser(u) {
-  return { ...publicUser(u), email: u.email, emailVerified: !!u.email_verified, totpEnabled: !!u.totp_enabled, interests: u.interests || [], language: u.language, onboarded: !!u.onboarded, status: u.status };
+  return { ...publicUser(u), email: u.email, emailVerified: !!u.email_verified, hasPassword: !!u.password_hash, totpEnabled: !!u.totp_enabled, interests: u.interests || [], language: u.language, onboarded: !!u.onboarded, status: u.status };
 }
 export function maskFlag(v) {
   const s = String(v); const m = s.match(/^([^{]{0,20}\{)(.*)(\})$/s);

@@ -19,14 +19,14 @@ Other commands:
 ```bash
 npm run dev          # restart on file changes
 npm run bootstrap    # create the admin from ADMIN_* without starting the server
-npm test             # 16 end-to-end API tests on a throwaway database that is dropped afterwards
+npm test             # 27 end-to-end API tests (16 platform + 11 OAuth against a fake GitHub) on a throwaway database that is dropped afterwards
 ```
 
 If `mongodb+srv://` URIs fail with `querySrv ECONNREFUSED`, your system resolver can't answer SRV lookups from Node; set `DNS_SERVERS=1.1.1.1,8.8.8.8`.
 
 ## What works
 
-**Players** — sign up, email verification, sign-in with optional TOTP two-factor, onboarding, profile and session management; browse and filter competitions; register solo or as a team (open, approval-based or invitation code); teams with owner/captain/member roles, invites by username or code, ownership transfer and roster rules; challenge board with category, solved and locked states; flag submission with distinct results (correct, incorrect, already solved, rate limited, submissions paused); hints with point costs; file downloads with SHA-256; per-team instances; live scoreboard with rank changes, top-five progression and a projector view; announcements and notifications in real time; practice sets that never count toward rankings; certificates with public verification.
+**Players** — sign up, email verification, sign-in with a password or GitHub / Google, optional TOTP two-factor, linked accounts, onboarding, profile and session management; browse and filter competitions; register solo or as a team (open, approval-based or invitation code); teams with owner/captain/member roles, invites by username or code, ownership transfer and roster rules; challenge board with category, solved and locked states; flag submission with distinct results (correct, incorrect, already solved, rate limited, submissions paused); hints with point costs; file downloads with SHA-256; per-team instances; live scoreboard with rank changes, top-five progression and a projector view; announcements and notifications in real time; practice sets that never count toward rankings; certificates with public verification.
 
 **Organizers** — six-step event wizard (drafts, publish checklist); challenge editor with Markdown preview, static / regex / per-team dynamic flags, hints, uploads, dynamic scoring per challenge, scheduled releases and unlock prerequisites, and a flag tester; registration approval, disqualification and score adjustments; submission monitor; integrity review queue with evidence, notes, status and explicit actions; announcements; staff roles (organizer, author, moderator); scoreboard freeze; CSV exports; certificate issuing.
 
@@ -40,6 +40,7 @@ If `mongodb+srv://` URIs fail with `querySrv ECONNREFUSED`, your system resolver
 - **Dynamic flags** are `PREFIX{hmac(app_secret + challenge_secret, challenge:team)[0:16]}`. If a team submits a flag that was generated for another team, the server raises a high-severity integrity signal.
 - **Integrity signals** (flag sharing, the same IP solving for different teams, bursts of throttled submissions) go to a review queue. Nothing is penalized automatically; actions are explicit, logged, and the affected team is told how to appeal.
 - **Scoring**: dynamic challenges use the CTFd-style quadratic decay `value = initial + (min − initial) / decay² × solves²`, floored at `min`, applied to every solver. First-blood bonus is a percentage. Hint costs and manual adjustments are subtracted or added. Ties go to whoever reached the score first.
+- **OAuth sign-in** (GitHub, Google) uses the authorization-code flow with PKCE. The SPA asks `POST /api/auth/oauth/:provider/start` for the provider URL; the server stores a hashed one-time state (10-minute TTL) and also sets it in an `HttpOnly` cookie scoped to `/api/auth/oauth`, so the callback only completes in the browser that started it. A first sign-in creates an account with no password and a verified email. If a user with the same email already exists, the identity is linked automatically only when both the provider and the local account have verified that address, so nobody can pre-register someone else's email and inherit their sign-ins. Two-factor still applies, and an account can't unlink its only sign-in method until it sets a password. Identities live in `oauth_identities`.
 - **Rate limits**: 5 submissions per minute per team per challenge (configurable), login limits per IP and per account, 2FA attempts, instance requests.
 - **Sessions** are random tokens in an `HttpOnly; SameSite=Lax` cookie (stored hashed). Every mutating request must carry an `X-CA-CSRF` header, which a cross-site page cannot set. Passwords use bcrypt.
 - **Security headers**: strict CSP (no inline scripts; the frontend uses event delegation), `X-Frame-Options: DENY`, `nosniff`, HSTS in production.
@@ -48,6 +49,15 @@ If `mongodb+srv://` URIs fail with `querySrv ECONNREFUSED`, your system resolver
 ## Challenge instances
 
 Set `INSTANCE_PROVIDER=docker` on a host with Docker. For a challenge with an image and port, each team gets its own container started with `docker run -d --rm --memory 256m --cpus 0.5 --pids-limit 128 -p 0:<port> -e FLAG=<team flag>`. Instances expire after the challenge's lifetime (default 45 minutes), can be extended twice by 30 minutes, and are stopped by a reaper. Set `INSTANCE_HOST` to the hostname players should connect to. With the default `none`, instance challenges tell players that instances are not enabled.
+
+## Sign in with GitHub / Google
+
+Create an OAuth app with each provider and set its client id and secret in `.env` (`GITHUB_CLIENT_ID` / `GITHUB_CLIENT_SECRET`, `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET`). The buttons appear on the sign-in and sign-up pages once a provider is configured.
+
+- **GitHub**: Settings → Developer settings → OAuth Apps → New. Homepage URL `BASE_URL`, callback URL `BASE_URL/api/auth/oauth/github/callback`.
+- **Google**: Cloud Console → APIs & Services → Credentials → OAuth client ID (Web application). Authorized redirect URI `BASE_URL/api/auth/oauth/google/callback`. The scopes are `openid email profile`.
+
+`BASE_URL` must be the public URL of the backend. If the frontend is served from somewhere else, set `FRONTEND_URL` too.
 
 ## Email
 
@@ -74,16 +84,18 @@ server/
   lib.js            validation, sessions, auth middleware, rate limits, TOTP
   core.js           permissions, phases, scoring, flag checks, integrity signals, SSE hub
   instances.js      per-team container instances
-  routes/           auth, events (arena), teams, manage (organizer), platform (orgs, admin)
+  oauth.js          GitHub / Google OAuth providers (PKCE, token exchange, profile)
+  routes/           auth, oauth, events (arena), teams, manage (organizer), platform (orgs, admin)
 public/
   index.html, css/app.css, js/core.js (router, API client), js/ui.js, js/views/*
 scripts/bootstrap.js first platform admin from ADMIN_* settings
 test/api.test.js    end-to-end API tests (fixtures in test/fixtures.js)
+test/oauth.test.js  OAuth sign-in tests against a fake GitHub
 ```
 
 ## Not included
 
-Payments (events can show a fee note; collecting it is up to you), an SMTP sender, OAuth providers, attack-defense format, and a writeup editor.
+Payments (events can show a fee note; collecting it is up to you), an SMTP sender, OAuth providers beyond GitHub and Google, attack-defense format, and a writeup editor.
 
 ## Frontend design system ("studio canvas")
 

@@ -124,7 +124,8 @@ r.patch('/me', requireAuth, async (req, res) => {
   res.json({ user: selfUser(await findOne('users', { id: u.id })) });
 });
 r.post('/me/password', requireAuth, async (req, res) => {
-  if (!checkPassword(String(req.body.current || ''), req.user.password_hash)) throw bad('Your current password is incorrect.');
+  // Accounts created with GitHub/Google have no password yet; they can set one without a current password.
+  if (req.user.password_hash && !checkPassword(String(req.body.current || ''), req.user.password_hash)) throw bad('Your current password is incorrect.');
   await update('users', { id: req.user.id }, { password_hash: hashPassword(passwordPolicy(req.body.next)) });
   await col('sessions').deleteMany({ user_id: req.user.id, token_hash: { $ne: req.sessionHash } });
   await audit(req.user.id, 'user.password_changed', `user:${req.user.id}`, {}, { ip: req.ip });
@@ -142,7 +143,7 @@ r.post('/me/2fa/enable', requireAuth, async (req, res) => {
   res.json({ ok: true });
 });
 r.post('/me/2fa/disable', requireAuth, async (req, res) => {
-  if (!checkPassword(String(req.body.password || ''), req.user.password_hash)) throw bad('Your password is incorrect.');
+  if (req.user.password_hash && !checkPassword(String(req.body.password || ''), req.user.password_hash)) throw bad('Your password is incorrect.');
   if (!verifyTotp(req.user.totp_secret, String(req.body.code || ''))) throw bad("That code didn't match.");
   await update('users', { id: req.user.id }, { totp_enabled: 0, totp_secret: null }); await audit(req.user.id, 'user.2fa_disabled', `user:${req.user.id}`);
   res.json({ ok: true });

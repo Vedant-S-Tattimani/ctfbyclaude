@@ -7,22 +7,31 @@ const side = `<div class="side-art"><div class="label">fs0cie1y</div><div><h2 st
 { "result": "correct", "value": 100, "rank": 7 }</div></div><div class="xs faint mono">Passwords are hashed with bcrypt · sessions are httpOnly cookies</div></div>`;
 const wrap = (inner) => `<div class="auth">${side}<div class="formcol"><div>${inner}</div></div></div>`;
 const devNote = (link) => (link ? `<div class="notice info">${icon('info')}<div><b>No mail server configured.</b> This link was also printed in the server log:<br><a class="link mono xs" href="${esc(link)}">${esc(link)}</a></div></div>` : '');
+// OAuth providers the server has configured (GitHub, Google). Fetched once per page load.
+let providersP = null;
+const providers = () => (providersP ||= api('/auth/oauth/providers').then((r) => r.providers).catch(() => []));
+const oauthButtons = (list, verb) => (list.length ? `<div class="stack" style="margin-bottom:20px">${list.map((p) => `<button type="button" class="btn lg" data-act="oauth" data-p="${esc(p.id)}">${verb} with ${esc(p.label)}</button>`).join('')}</div>
+  <div class="row xs faint mono" style="gap:10px;margin-bottom:20px"><span class="grow" style="border-top:1px solid currentColor"></span>or<span class="grow" style="border-top:1px solid currentColor"></span></div>` : '');
+const oauthError = (query) => (query.oauth_error ? `<div class="notice err" style="margin-bottom:20px">${icon('x')}<div>${esc(query.oauth_error)}</div></div>` : '');
+onAct('oauth', async (el) => {
+  const r = await api(`/auth/oauth/${encodeURIComponent(el.dataset.p)}/start`, { method: 'POST', body: { mode: 'login', next: sessionStorage.getItem('ca_after') || undefined } });
+  location.href = r.url;
+});
 function after() { const a = sessionStorage.getItem('ca_after'); sessionStorage.removeItem('ca_after'); return a && !a.startsWith('/login') ? a : null; }
 
-route('/login', { shell: 'auth', title: 'Sign in', view: () => wrap(`<h1>Sign in</h1><p class="dim" style="margin:6px 0 24px">Welcome back.</p>
-  <form class="stack" data-form="login" novalidate><div class="field"><label for="l1">Username or email</label><input id="l1" class="input" name="login" autocomplete="username" required></div>
+route('/login', { shell: 'auth', title: 'Sign in', view: async ({ query }) => wrap(`<h1>Sign in</h1><p class="dim" style="margin:6px 0 24px">Welcome back.</p>
+  ${oauthError(query)}${oauthButtons(await providers(), 'Continue')}<form class="stack" data-form="login" novalidate><div class="field"><label for="l1">Username or email</label><input id="l1" class="input" name="login" autocomplete="username" required></div>
   <div class="field"><div class="row between"><label for="l2" class="flabel">Password</label><a class="xs link" href="#/forgot">Forgot password?</a></div><input id="l2" class="input" type="password" name="password" autocomplete="current-password" required></div>
   <div class="form-error"></div><button class="btn primary lg" type="submit">Sign in</button></form>
-  <p class="small dim" style="margin-top:20px">New here? <a class="link" href="#/signup">Create an account</a></p>
-  <p class="xs faint mono" style="margin-top:28px">Demo accounts (password <b>cipherarena-demo</b>): k3rnel_v · mira_o · admin</p>`) });
+  <p class="small dim" style="margin-top:20px">New here? <a class="link" href="#/signup">Create an account</a></p>`) });
 onForm('login', async (f) => {
   const r = await api('/auth/login', { method: 'POST', body: f });
   if (r.twoFactor) { state.pending2fa = true; return go('/2fa'); }
   await loadMe(); toast(`Signed in as @${state.me.username}`);
   go(!state.me.onboarded ? '/onboarding' : after() || '/dashboard');
 });
-route('/signup', { shell: 'auth', title: 'Create account', view: () => wrap(`<h1>Create your account</h1><p class="dim" style="margin:6px 0 24px">Free for players. Only username, email and password are required.</p>
-  <form class="stack" data-form="signup" novalidate><div class="field"><label for="s1">Email</label><input id="s1" class="input" type="email" name="email" autocomplete="email" required></div>
+route('/signup', { shell: 'auth', title: 'Create account', view: async ({ query }) => wrap(`<h1>Create your account</h1><p class="dim" style="margin:6px 0 24px">Free for players. Only username, email and password are required.</p>
+  ${oauthError(query)}${oauthButtons(await providers(), 'Sign up')}<form class="stack" data-form="signup" novalidate><div class="field"><label for="s1">Email</label><input id="s1" class="input" type="email" name="email" autocomplete="email" required></div>
   <div class="field"><label for="s2">Username</label><input id="s2" class="input mono" name="username" autocomplete="username" required pattern="[A-Za-z0-9_]{3,20}"><span class="hint">3–20 letters, numbers or underscores. Shown on scoreboards.</span></div>
   <div class="field"><label for="s3">Password</label><input id="s3" class="input" type="password" name="password" autocomplete="new-password" required minlength="10" data-input="pwmeter"><span class="hint" id="pwh">At least 10 characters. A passphrase works well.</span></div>
   <div class="form-error"></div><button class="btn primary lg" type="submit">Create account</button></form>
