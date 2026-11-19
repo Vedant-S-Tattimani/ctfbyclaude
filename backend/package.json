@@ -1,7 +1,7 @@
 {
   "name": "cipherarena-backend",
   "version": "1.0.0",
-  "description": "CipherArena — CTF hosting, management and competition platform (backend API)",
+  "description": "CipherArena \u2014 CTF hosting, management and competition platform (backend API)",
   "private": true,
   "type": "module",
   "main": "server/index.js",
@@ -12,7 +12,8 @@
     "start": "node server/index.js",
     "dev": "node --watch server/index.js",
     "bootstrap": "node scripts/bootstrap.js",
-    "test": "node --test --test-concurrency=1 test/*.test.js"
+    "test": "node --test --test-concurrency=1 test/*.test.js",
+    "seed:practice": "node scripts/seed-practice.js"
   },
   "dependencies": {
     "bcryptjs": "^3.0.3",

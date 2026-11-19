@@ -19,7 +19,8 @@ Other commands:
 ```bash
 npm run dev          # restart on file changes
 npm run bootstrap    # create the admin from ADMIN_* without starting the server
-npm test             # 27 end-to-end API tests (16 platform + 11 OAuth against a fake GitHub) on a throwaway database that is dropped afterwards
+npm run seed:practice # create/top up the always-open Practice Arena (22 challenges, all categories)
+npm test             # 52 tests: platform, OAuth against a fake GitHub, and every practice challenge solved from its files on a throwaway database that is dropped afterwards
 ```
 
 If `mongodb+srv://` URIs fail with `querySrv ECONNREFUSED`, your system resolver can't answer SRV lookups from Node; set `DNS_SERVERS=1.1.1.1,8.8.8.8`.
@@ -91,6 +92,8 @@ public/
 scripts/bootstrap.js first platform admin from ADMIN_* settings
 test/api.test.js    end-to-end API tests (fixtures in test/fixtures.js)
 test/oauth.test.js  OAuth sign-in tests against a fake GitHub
+test/practice.test.js solves each practice challenge from its description and files only
+scripts/seed-practice.js + scripts/practice/  practice challenges and their generated files (PNG, pcap, UART capture)
 ```
 
 ## Not included
