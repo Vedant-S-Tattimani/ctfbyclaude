@@ -9,7 +9,7 @@ Separated into **backend** (Node.js/Express API) and **frontend** (vanilla JS SP
 cd backend
 npm install
 cp .env.example .env   # set MONGODB_URI and ADMIN_USERNAME / ADMIN_EMAIL / ADMIN_PASSWORD
-                       # optional: GITHUB_* / GOOGLE_* for OAuth sign-in (see docs/ARCHITECTURE.md)
+                       # plus FIREBASE_WEB_* and backend/serviceAccountKey.json for sign-in (see SETUP.md)
 
 # 2. Start backend (also serves frontend by default)
 npm run dev

@@ -1,112 +1,10 @@
-// Authentication, account settings, notifications, realtime stream.
+// Profile settings, notifications, dashboard, realtime stream. Sign-in lives in routes/signin.js.
 import { Router } from 'express';
-import { config } from '../config.js';
 import { col, findOne, find, count, insert, update, updateMany, byIds, now, audit } from '../db.js';
-import {
-  HttpError, bad, str, sha256, randomToken, hashPassword, checkPassword, passwordPolicy, USERNAME_RE, EMAIL_RE,
-  createSession, clearSessionCookie, requireAuth, rateHit, verifyTotp, newTotpSecret, selfUser, oneOf,
-} from '../lib.js';
+import { bad, str, USERNAME_RE, requireAuth, selfUser, oneOf } from '../lib.js';
 import { hub, eventBySlug, canModerate, scoreboard, CATEGORY_IDS, phase, assertCanView, teamIdsOf } from '../core.js';
-import { syncUserToFirebase } from '../firebase.js';
 
 const r = Router();
-const devLink = (path) => (config.exposeDevLinks ? `${config.baseUrl}/${path}` : undefined);
-
-async function issueEmailToken(userId, kind, hours) {
-  const t = randomToken(24);
-  const exp = now() + hours * 3600_000;
-  await col('email_tokens').insertOne({ token_hash: sha256(t), user_id: userId, kind, expires_at: exp, expire_at: new Date(exp), used: 0 });
-  const link = `${config.baseUrl}/#/${kind === 'verify' ? 'verify-email' : 'reset'}?token=${t}`;
-  console.log(`[mail] ${kind} link for user ${userId}: ${link}`); // replace with an SMTP sender in production
-  return t;
-}
-async function useEmailToken(token, kind) {
-  // Atomically mark the token used so it cannot be redeemed twice.
-  const row = await col('email_tokens').findOneAndUpdate({ token_hash: sha256(String(token || '')), kind, used: 0, expires_at: { $gte: now() } }, { $set: { used: 1 } });
-  if (!row) throw bad('This link is invalid or has expired. Request a new one.');
-  return row.user_id;
-}
-const loginLimit = (req, who = '') => {
-  const checks = [rateHit(`login:${req.ip}`, config.loginPerIp, 10 * 60_000)];
-  if (who) checks.push(rateHit(`login:${req.ip}:${String(who).toLowerCase()}`, config.loginPerAccount, 10 * 60_000));
-  const blocked = checks.find((c) => !c.ok);
-  if (blocked) throw new HttpError(429, `Too many attempts. Try again in ${Math.ceil(blocked.retryMs / 60000)} minutes.`);
-};
-
-r.post('/auth/signup', async (req, res) => {
-  loginLimit(req);
-  const email = str(req.body.email, { name: 'Email', required: true, max: 200, pattern: EMAIL_RE });
-  const username = str(req.body.username, { name: 'Username', required: true, pattern: USERNAME_RE });
-  const password = passwordPolicy(req.body.password);
-  if (await findOne('users', { username })) throw bad('That username is taken.', { field: 'username' });
-  if (await findOne('users', { email })) throw bad('An account with that email already exists. Try signing in.', { field: 'email' });
-  const id = await insert('users', {
-    username, email, display_name: username, password_hash: hashPassword(password), role: 'participant', status: 'active', email_verified: 0,
-    totp_secret: null, totp_enabled: 0, experience: null, interests: [], language: 'en', country: null, bio: null, onboarded: 0, created_at: now(), last_seen: null,
-  });
-  const t = await issueEmailToken(id, 'verify', 48);
-  await createSession(res, req, id);
-  await audit(id, 'user.signup', `user:${id}`, {}, { ip: req.ip });
-  const newUser = await findOne('users', { id });
-  res.json({ ok: true, user: selfUser(newUser), devLink: devLink(`#/verify-email?token=${t}`) });
-});
-
-r.post('/auth/login', async (req, res) => {
-  loginLimit(req, req.body.login);
-  const login = str(req.body.login, { name: 'Username or email', required: true, max: 200 });
-  const u = await findOne('users', { $or: [{ username: login }, { email: login }] });
-  if (!u || !checkPassword(String(req.body.password || ''), u.password_hash)) throw new HttpError(401, 'Incorrect username or password.');
-  if (u.status !== 'active') throw new HttpError(403, 'This account is suspended. Contact support to appeal.');
-  await createSession(res, req, u.id, !!u.totp_enabled);
-  await audit(u.id, 'user.login', `user:${u.id}`, { twoFactor: !!u.totp_enabled }, { ip: req.ip });
-  // Sync admin/organiser profiles to Firebase on login
-  syncUserToFirebase(u).catch(() => {});
-  res.json({ ok: true, twoFactor: !!u.totp_enabled });
-});
-
-r.post('/auth/2fa', async (req, res) => {
-  if (!req.pendingUser) throw new HttpError(401, 'Sign in with your password first.');
-  const lim = rateHit(`2fa:${req.pendingUser.id}`, 6, 5 * 60_000);
-  if (!lim.ok) throw new HttpError(429, 'Too many codes tried. Wait a few minutes.');
-  if (!verifyTotp(req.pendingUser.totp_secret, String(req.body.code || '').trim())) throw bad("That code didn't match. Codes change every 30 seconds.");
-  await update('sessions', { token_hash: req.sessionHash }, { pending_2fa: 0 });
-  res.json({ ok: true });
-});
-
-r.post('/auth/logout', async (req, res) => {
-  if (req.sessionHash) await col('sessions').deleteOne({ token_hash: req.sessionHash });
-  clearSessionCookie(res); res.json({ ok: true });
-});
-
-r.get('/auth/me', async (req, res) => {
-  if (!req.user) return res.json({ user: null, pending2fa: !!req.pendingUser });
-  const [unread, memberships] = await Promise.all([count('notifications', { user_id: req.user.id, read: 0 }), find('org_members', { user_id: req.user.id })]);
-  const orgs = await byIds('orgs', memberships.map((m) => m.org_id), { slug: 1, name: 1 });
-  res.json({ user: { ...selfUser(req.user), unread, orgs: memberships.filter((m) => orgs.has(m.org_id)).map((m) => ({ slug: orgs.get(m.org_id).slug, name: orgs.get(m.org_id).name, role: m.role })) } });
-});
-
-r.post('/auth/verify', async (req, res) => { const uid = await useEmailToken(req.body.token, 'verify'); await update('users', { id: uid }, { email_verified: 1 }); res.json({ ok: true }); });
-r.post('/auth/resend-verification', requireAuth, async (req, res) => {
-  if (req.user.email_verified) return res.json({ ok: true, already: true });
-  const lim = rateHit(`verify:${req.user.id}`, 3, 3600_000); if (!lim.ok) throw new HttpError(429, 'You can request 3 verification emails per hour.');
-  const t = await issueEmailToken(req.user.id, 'verify', 48); res.json({ ok: true, devLink: devLink(`#/verify-email?token=${t}`) });
-});
-r.post('/auth/forgot', async (req, res) => {
-  loginLimit(req);
-  const email = str(req.body.email, { name: 'Email', required: true, max: 200 });
-  const u = await findOne('users', { email }, { projection: { id: 1 } });
-  let link; if (u) { const t = await issueEmailToken(u.id, 'reset', 2); link = devLink(`#/reset?token=${t}`); }
-  res.json({ ok: true, devLink: link }); // same response whether or not the account exists
-});
-r.post('/auth/reset', async (req, res) => {
-  const password = passwordPolicy(req.body.password);
-  const uid = await useEmailToken(req.body.token, 'reset');
-  await update('users', { id: uid }, { password_hash: hashPassword(password) });
-  await col('sessions').deleteMany({ user_id: uid });
-  await audit(uid, 'user.password_reset', `user:${uid}`, {}, { ip: req.ip });
-  res.json({ ok: true });
-});
-
 /* ---------- account ---------- */
 r.patch('/me', requireAuth, async (req, res) => {
   const b = req.body, u = req.user;
@@ -127,45 +25,6 @@ r.patch('/me', requireAuth, async (req, res) => {
   await update('users', { id: u.id }, set);
   res.json({ user: selfUser(await findOne('users', { id: u.id })) });
 });
-r.post('/me/password', requireAuth, async (req, res) => {
-  // Accounts created with GitHub/Google have no password yet; they can set one without a current password.
-  if (req.user.password_hash && !checkPassword(String(req.body.current || ''), req.user.password_hash)) throw bad('Your current password is incorrect.');
-  await update('users', { id: req.user.id }, { password_hash: hashPassword(passwordPolicy(req.body.next)) });
-  await col('sessions').deleteMany({ user_id: req.user.id, token_hash: { $ne: req.sessionHash } });
-  await audit(req.user.id, 'user.password_changed', `user:${req.user.id}`, {}, { ip: req.ip });
-  res.json({ ok: true });
-});
-r.post('/me/2fa/setup', requireAuth, async (req, res) => {
-  if (req.user.totp_enabled) throw bad('Two-factor authentication is already on.');
-  const secret = newTotpSecret(); await update('users', { id: req.user.id }, { totp_secret: secret });
-  res.json({ secret, uri: `otpauth://totp/CipherArena:${encodeURIComponent(req.user.username)}?secret=${secret}&issuer=CipherArena&digits=6&period=30` });
-});
-r.post('/me/2fa/enable', requireAuth, async (req, res) => {
-  if (!req.user.totp_secret) throw bad('Start setup first.');
-  if (!verifyTotp(req.user.totp_secret, String(req.body.code || ''))) throw bad("That code didn't match. Check your device's clock and try the next code.");
-  await update('users', { id: req.user.id }, { totp_enabled: 1 }); await audit(req.user.id, 'user.2fa_enabled', `user:${req.user.id}`);
-  res.json({ ok: true });
-});
-r.post('/me/2fa/disable', requireAuth, async (req, res) => {
-  if (req.user.password_hash && !checkPassword(String(req.body.password || ''), req.user.password_hash)) throw bad('Your password is incorrect.');
-  if (!verifyTotp(req.user.totp_secret, String(req.body.code || ''))) throw bad("That code didn't match.");
-  await update('users', { id: req.user.id }, { totp_enabled: 0, totp_secret: null }); await audit(req.user.id, 'user.2fa_disabled', `user:${req.user.id}`);
-  res.json({ ok: true });
-});
-r.get('/me/sessions', requireAuth, async (req, res) => {
-  const list = await find('sessions', { user_id: req.user.id, expires_at: { $gt: now() } }, { sort: { last_used: -1 } });
-  res.json({ sessions: list.map((s) => ({ id: s.token_hash.slice(0, 16), ip: s.ip, ua: s.ua, createdAt: s.created_at, lastUsed: s.last_used, current: s.token_hash === req.sessionHash })) });
-});
-r.post('/me/sessions/revoke-others', requireAuth, async (req, res) => {
-  const { deletedCount } = await col('sessions').deleteMany({ user_id: req.user.id, token_hash: { $ne: req.sessionHash } });
-  res.json({ ok: true, revoked: deletedCount });
-});
-r.delete('/me/sessions/:id', requireAuth, async (req, res) => {
-  const prefix = String(req.params.id).replace(/[^a-f0-9]/g, '').slice(0, 16);
-  if (prefix.length === 16) await col('sessions').deleteOne({ user_id: req.user.id, token_hash: { $regex: `^${prefix}`, $ne: req.sessionHash } });
-  res.json({ ok: true });
-});
-
 r.get('/me/notifications', requireAuth, async (req, res) => {
   res.json({ notifications: await find('notifications', { user_id: req.user.id }, { projection: { user_id: 0 }, sort: { id: -1 }, limit: 30 }) });
 });

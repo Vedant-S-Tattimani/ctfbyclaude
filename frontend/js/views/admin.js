@@ -63,7 +63,7 @@ route('/admin/events', { ...AD, title: 'Events', view: async () => {
       <td class="r">${e.status === 'suspended' ? `<button class="btn sm" data-act="evres" data-slug="${esc(e.slug)}">Restore</button>` : `<button class="btn danger sm" data-act="evsus" data-slug="${esc(e.slug)}" data-name="${esc(e.name)}">Suspend</button>`}</td></tr>`).join('')}</tbody></table></div></div>`;
 } });
 onAct('evsus', async (el) => { const r = await dialog({ title: `Suspend ${el.dataset.name}?`, body: `<div class="field"><label for="er">Reason sent to the event staff</label><textarea id="er" class="textarea" name="reason" required></textarea></div>`, actions: [{ label: 'Cancel', kind: 'ghost', value: null }, { label: 'Suspend event', kind: 'danger', value: 'go', submit: true }] }); if (r.value !== 'go') return; await api(`/admin/events/${el.dataset.slug}`, { method: 'PATCH', body: { status: 'suspended', reason: r.form.get('reason') } }); toast('Event suspended.'); refresh(); });
-onAct('evres', async (el) => { await api(`/admin/events/${el.dataset.slug}`, { method: 'PATCH', body: { status: 'published' } }); toast('Event restored.'); refresh(); });
+onAct('evres', async (el) => { const r = await api(`/admin/events/${el.dataset.slug}`, { method: 'PATCH', body: { status: 'restore' } }); toast(r.status === 'published' ? 'Event restored and published again.' : 'Event restored as a draft.'); refresh(); });
 let AQ = '';
 route('/admin/audit', { ...AD, title: 'Audit log', view: async () => {
   const { entries } = await api(`/admin/audit?q=${encodeURIComponent(AQ)}`);

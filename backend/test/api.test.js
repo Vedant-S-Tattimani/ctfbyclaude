@@ -8,14 +8,17 @@ process.env.NODE_ENV = 'test'; process.env.EXPOSE_DEV_LINKS = '1'; process.env.L
 const { config } = await import('../server/config.js');
 const { connectDb, closeDb, dropDb, findOne, count } = await import('../server/db.js');
 const { createApp } = await import('../server/index.js');
-const { loadFixtures, PASSWORD } = await import('./fixtures.js');
+const { loadFixtures, uidOf } = await import('./fixtures.js');
+const { useIdentityProvider } = await import('../server/identity.js');
+const { FakeFirebase } = await import('./fake-identity.js');
+const fake = new FakeFirebase(); useIdentityProvider(fake);
 const { dynamicFlag } = await import('../server/core.js');
 const { totpAt } = await import('../server/lib.js');
 
 let server, base;
 before(async () => {
   await connectDb({ dbName: `${config.mongoDb}_test_${crypto.randomBytes(4).toString('hex')}` });
-  await loadFixtures();
+  await loadFixtures(fake);
   server = createApp().listen(0); await new Promise((r) => server.once('listening', r));
   base = `http://127.0.0.1:${server.address().port}/api`;
 });
@@ -30,50 +33,60 @@ function client() {
     return { status: res.status, data };
   };
 }
-const login = async (u) => { const c = client(); const r = await c('/auth/login', { method: 'POST', body: { login: u, password: PASSWORD } }); assert.equal(r.status, 200); return c; };
+// Signs in the way the browser does after Firebase: hand the server a fresh ID token.
+const login = async (u) => { const c = client(); const r = await c('/auth/firebase', { method: 'POST', body: { idToken: fake.idToken(uidOf(u)) } }); assert.equal(r.status, 200, JSON.stringify(r.data)); return c; };
 
 test('CSRF header is required for mutations', async () => {
-  const r = await fetch(`${base}/auth/login`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+  const r = await fetch(`${base}/auth/firebase`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
   assert.equal(r.status, 403);
 });
-test('signup → verify email → onboarding profile', async () => {
+test('first Firebase sign-in with a username creates the profile; verification is picked up later', async () => {
+  const acct = fake.addAccount({ email: 'new@x.test', emailVerified: false });
   const c = client();
-  const r = await c('/auth/signup', { method: 'POST', body: { email: 'new@x.test', username: 'newbie_1', password: 'correct horse battery' } });
-  assert.equal(r.status, 200); assert.ok(r.data.devLink);
-  const token = new URL(r.data.devLink.replace('#/', '')).searchParams.get('token');
-  assert.equal((await c('/auth/verify', { method: 'POST', body: { token } })).status, 200);
-  const me = await c('/auth/me'); assert.equal(me.data.user.emailVerified, true);
+  const r = await c('/auth/firebase', { method: 'POST', body: { idToken: fake.idToken(acct.uid), username: 'newbie_1' } });
+  assert.equal(r.status, 200, JSON.stringify(r.data)); assert.equal(r.data.created, true);
+  let me = (await c('/auth/me')).data.user; assert.equal(me.username, 'newbie_1'); assert.equal(me.emailVerified, false);
+  assert.equal((await c('/auth/resend-verification', { method: 'POST' })).status, 200); assert.ok(fake.verificationEmails.includes(acct.uid));
+  acct.emailVerified = true; // the person clicks the link in the email
+  assert.equal((await c('/auth/check-verification', { method: 'POST' })).data.verified, true);
+  me = (await c('/auth/me')).data.user; assert.equal(me.emailVerified, true);
   assert.equal((await c('/me', { method: 'PATCH', body: { interests: ['web', 'nope'], experience: 'beginner', onboarded: true } })).data.user.interests.join(), 'web');
-  assert.equal((await c('/auth/signup', { method: 'POST', body: { email: 'new@x.test', username: 'other_1', password: 'correct horse battery' } })).status, 400);
+  // nothing about the password lives in MongoDB
+  const doc = await findOne('users', { username: 'newbie_1' }); assert.equal(doc.password_hash, undefined); assert.equal(doc.firebase_uid, acct.uid);
+  // a second account can't take the same username
+  const other = fake.addAccount({ email: 'other@x.test' });
+  const dup = await client()('/auth/firebase', { method: 'POST', body: { idToken: fake.idToken(other.uid), username: 'newbie_1' } });
+  assert.equal(dup.status, 400); assert.match(dup.data.error, /username is taken/);
+  assert.equal((await client()('/auth/check-username?username=newbie_1')).data.available, false);
 });
-test('session token stays in the HttpOnly cookie: never in a response body, never accepted from a header', async () => {
-  const res = await fetch(`${base}/auth/login`, { method: 'POST', headers: { 'X-CA-CSRF': '1', 'Content-Type': 'application/json' }, body: JSON.stringify({ login: 'k3rnel_v', password: PASSWORD }) });
-  const body = await res.json();
-  const cookie = res.headers.get('set-cookie');
+test('session cookie is HttpOnly, never in a response body, never accepted from a header', async () => {
+  const res = await fetch(`${base}/auth/firebase`, { method: 'POST', headers: { 'X-CA-CSRF': '1', 'Content-Type': 'application/json' }, body: JSON.stringify({ idToken: fake.idToken(uidOf('k3rnel_v')) }) });
+  const body = await res.json(); const cookie = res.headers.get('set-cookie');
   assert.match(cookie, /HttpOnly/);
   const token = cookie.split(';')[0].split('=')[1];
-  assert.equal(body.token, undefined); assert.ok(!JSON.stringify(body).includes(token));
-  for (const headers of [{ Authorization: `Bearer ${token}` }, { 'X-CA-Token': token }]) {
-    const me = await (await fetch(`${base}/auth/me`, { headers })).json();
-    assert.equal(me.user, null, `token in ${Object.keys(headers)[0]} must not sign in`);
-  }
-  const viaCookie = await (await fetch(`${base}/auth/me`, { headers: { cookie: `ca_session=${token}` } })).json();
-  assert.equal(viaCookie.user.username, 'k3rnel_v');
+  assert.ok(!JSON.stringify(body).includes(token));
+  for (const headers of [{ Authorization: `Bearer ${token}` }, { 'X-CA-Token': token }]) assert.equal((await (await fetch(`${base}/auth/me`, { headers })).json()).user, null);
+  assert.equal((await (await fetch(`${base}/auth/me`, { headers: { cookie: `ca_session=${token}` } })).json()).user.username, 'k3rnel_v');
 });
-test('wrong password is rejected without revealing which part', async () => {
-  const r = await client()('/auth/login', { method: 'POST', body: { login: 'k3rnel_v', password: 'nope' } });
-  assert.equal(r.status, 401); assert.match(r.data.error, /username or password/);
+test('bad, stale and forged sign-ins are refused', async () => {
+  assert.equal((await client()('/auth/firebase', { method: 'POST', body: { idToken: 'not-a-real-token-but-long-enough' } })).status, 401);
+  const stale = await client()('/auth/firebase', { method: 'POST', body: { idToken: fake.idToken(uidOf('mt_rx'), { ageSeconds: 600 }) } });
+  assert.equal(stale.status, 401); assert.match(stale.data.error, /too old/);
+  const forged = await fetch(`${base}/auth/me`, { headers: { cookie: 'ca_session=fake-sess.eyJ1aWQiOiJ1aWQtYWRtaW4ifQ' } });
+  assert.equal((await forged.json()).user, null);
 });
-test('two-factor: enable, then login requires code', async () => {
+test('two-factor: secret is stored in Firebase, and sign-in needs the code', async () => {
   const c = await login('ada_hex');
   const s = await c('/me/2fa/setup', { method: 'POST' });
-  const code = totpAt(s.data.secret, Math.floor(Date.now() / 30000));
-  assert.equal((await c('/me/2fa/enable', { method: 'POST', body: { code } })).status, 200);
-  const c2 = client(); const l = await c2('/auth/login', { method: 'POST', body: { login: 'ada_hex', password: PASSWORD } });
+  assert.equal((await c('/me/2fa/enable', { method: 'POST', body: { code: totpAt(s.data.secret, Math.floor(Date.now() / 30000)) } })).status, 200);
+  assert.equal((await fake.getTotp(uidOf('ada_hex'))).secret, s.data.secret);
+  assert.equal((await findOne('users', { username: 'ada_hex' })).totp_secret, undefined, 'no 2FA secret in MongoDB');
+  const c2 = client();
+  const l = await c2('/auth/firebase', { method: 'POST', body: { idToken: fake.idToken(uidOf('ada_hex')) } });
   assert.equal(l.data.twoFactor, true);
-  assert.equal((await c2('/auth/me')).data.user, null);
-  assert.equal((await c2('/auth/2fa', { method: 'POST', body: { code: '000000' } })).status, 400);
-  assert.equal((await c2('/auth/2fa', { method: 'POST', body: { code: totpAt(s.data.secret, Math.floor(Date.now() / 30000)) } })).status, 200);
+  assert.equal((await c2('/auth/me')).data.user, null, 'no session before the code');
+  assert.equal((await c2('/auth/2fa', { method: 'POST', body: { idToken: fake.idToken(uidOf('ada_hex')), code: '000000' } })).status, 400);
+  assert.equal((await c2('/auth/2fa', { method: 'POST', body: { idToken: fake.idToken(uidOf('ada_hex')), code: totpAt(s.data.secret, Math.floor(Date.now() / 30000)) } })).status, 200);
   assert.equal((await c2('/auth/me')).data.user.username, 'ada_hex');
 });
 test('flag submission: incorrect, correct, already, rate limit; flags never leak', async () => {
@@ -174,11 +187,32 @@ test('integrity actions are recorded and revoke solves', async () => {
   assert.equal((await m(`/manage/events/ironveil-2026/incidents/${inc.id}/action`, { method: 'POST', body: { action: 'warn', reason: 'Shared flag' } })).status, 200);
   assert.ok(await findOne('audit_log', { action: 'incident.warn' }));
 });
+test('admin: restoring a suspended event returns it to its previous status, never publishing a draft', async () => {
+  const admin = await login('admin');
+  const status = async (slug) => (await admin(`/manage/events/${slug}`)).data.event.status;
+  // a draft created by an organizer
+  const mira = await login('mira_o');
+  const created = await mira('/manage/events', { method: 'POST', body: { name: 'Draft Only', slug: 'draft-only', starts_at: Date.now() + 86400_000, ends_at: Date.now() + 2 * 86400_000 } });
+  assert.equal(created.status, 200, JSON.stringify(created.data));
+  assert.equal((await admin('/admin/events/draft-only', { method: 'PATCH', body: { status: 'suspended', reason: 'test' } })).status, 200);
+  assert.equal(await status('draft-only'), 'suspended');
+  const r = await admin('/admin/events/draft-only', { method: 'PATCH', body: { status: 'restore' } });
+  assert.equal(r.data.status, 'draft'); assert.equal(await status('draft-only'), 'draft');
+  // a published event comes back published
+  await admin('/admin/events/ironveil-2026', { method: 'PATCH', body: { status: 'suspended', reason: 'test' } });
+  assert.equal((await admin('/admin/events/ironveil-2026', { method: 'PATCH', body: { status: 'restore' } })).data.status, 'published');
+  assert.equal((await admin('/admin/events/ironveil-2026', { method: 'PATCH', body: { status: 'restore' } })).status, 400, 'only suspended events can be restored');
+});
 test('admin: suspend signs the user out; non-admin blocked', async () => {
   const a = await login('admin'); const victim = await login('hoot');
   const id = (await findOne('users', { username: 'hoot' })).id;
   assert.equal((await a(`/admin/users/${id}`, { method: 'PATCH', body: { status: 'suspended' } })).status, 200);
   assert.equal((await victim('/auth/me')).data.user, null);
+  assert.equal(fake.accounts.get(uidOf('hoot')).disabled, true, 'the Firebase account is disabled too');
+  assert.equal((await client()('/auth/firebase', { method: 'POST', body: { idToken: fake.idToken(uidOf('hoot')) } })).status, 403);
+  assert.equal((await a(`/admin/users/${id}`, { method: 'PATCH', body: { status: 'active' } })).status, 200);
+  assert.equal(fake.accounts.get(uidOf('hoot')).disabled, false);
+  await login('hoot');
   assert.equal((await (await login('k3rnel_v'))('/admin/overview')).status, 403);
 });
 test('scoreboard and certificate verification are public', async () => {

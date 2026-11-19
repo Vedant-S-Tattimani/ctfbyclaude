@@ -1,61 +1,76 @@
-// Sign up, sign in, two-factor, email verification, password reset, onboarding.
+// Sign up, sign in, two-factor, email verification, password reset (through Firebase Authentication), onboarding.
 import { api, route, state, go, loadMe, onForm, onAct, onChange, refresh } from '../core.js';
 import { esc, icon, toast, CAT } from '../ui.js';
+import { firebase, signInWithEmail, signInWithProvider, signUpWithEmail, submitTwoFactor, hasPendingTwoFactor, sendPasswordReset } from '../firebase-auth.js';
 
 const side = `<div class="side-art"><div class="label">fs0cie1y</div><div><h2 style="font-size:34px;line-height:1.05">Every flag you submit<br>is checked on the server.</h2>
   <div class="term" style="margin-top:24px">POST /api/events/ironveil-2026/challenges/2/submit
-{ "result": "correct", "value": 100, "rank": 7 }</div></div><div class="xs faint mono">Passwords are hashed with bcrypt · sessions are httpOnly cookies</div></div>`;
+{ "result": "correct", "value": 100, "rank": 7 }</div></div><div class="xs faint mono">Sign-in by Firebase Authentication · sessions are httpOnly cookies</div></div>`;
 const wrap = (inner) => `<div class="auth">${side}<div class="formcol"><div>${inner}</div></div></div>`;
-const devNote = (link) => (link ? `<div class="notice info">${icon('info')}<div><b>No mail server configured.</b> This link was also printed in the server log:<br><a class="link mono xs" href="${esc(link)}">${esc(link)}</a></div></div>` : '');
-// OAuth providers the server has configured (GitHub, Google). Fetched once per page load.
-let providersP = null;
-const providers = () => (providersP ||= api('/auth/oauth/providers').then((r) => r.providers).catch(() => []));
-const oauthButtons = (list, verb) => (list.length ? `<div class="stack" style="margin-bottom:20px">${list.map((p) => `<button type="button" class="btn lg" data-act="oauth" data-p="${esc(p.id)}">${verb} with ${esc(p.label)}</button>`).join('')}</div>
-  <div class="row xs faint mono" style="gap:10px;margin-bottom:20px"><span class="grow" style="border-top:1px solid currentColor"></span>or<span class="grow" style="border-top:1px solid currentColor"></span></div>` : '');
-const oauthError = (query) => (query.oauth_error ? `<div class="notice err" style="margin-bottom:20px">${icon('x')}<div>${esc(query.oauth_error)}</div></div>` : '');
-onAct('oauth', async (el) => {
-  const r = await api(`/auth/oauth/${encodeURIComponent(el.dataset.p)}/start`, { method: 'POST', body: { mode: 'login', next: sessionStorage.getItem('ca_after') || undefined } });
-  location.href = r.url;
-});
+const LABEL = { google: 'Google', github: 'GitHub' };
 function after() { const a = sessionStorage.getItem('ca_after'); sessionStorage.removeItem('ca_after'); return a && !a.startsWith('/login') ? a : null; }
 
-route('/login', { shell: 'auth', title: 'Sign in', view: async ({ query }) => wrap(`<h1>Sign in</h1><p class="dim" style="margin:6px 0 24px">Welcome back.</p>
-  ${oauthError(query)}${oauthButtons(await providers(), 'Continue')}<form class="stack" data-form="login" novalidate><div class="field"><label for="l1">Username or email</label><input id="l1" class="input" name="login" autocomplete="username" required></div>
+/** Provider buttons, or a notice when the server has no Firebase settings yet. */
+async function signInOptions(verb) {
+  let f;
+  try { f = await firebase(); } catch (e) { return `<div class="notice err" style="margin-bottom:20px">${icon('x')}<div>${esc(e.message)}</div></div>`; }
+  if (!f.ready) return `<div class="notice warn" style="margin-bottom:20px">${icon('alert')}<div><b>Sign-in isn't set up yet.</b> An administrator needs to add the Firebase settings to the server.</div></div>`;
+  if (!f.providers.length) return '';
+  return `<div class="stack" style="margin-bottom:20px">${f.providers.map((p) => `<button type="button" class="btn lg" data-act="provider" data-p="${esc(p)}">${verb} with ${esc(LABEL[p] || p)}</button>`).join('')}</div>
+    <div class="row xs faint mono" style="gap:10px;margin-bottom:20px"><span class="grow" style="border-top:1px solid currentColor"></span>or<span class="grow" style="border-top:1px solid currentColor"></span></div>`;
+}
+/** Where to go once the server session exists (or the 2FA page if a code is needed). */
+async function signedIn(r) {
+  if (r.twoFactor) return go('/2fa');
+  await loadMe(); toast(`Signed in as @${state.me.username}`);
+  go(r.created || !state.me.onboarded ? '/onboarding' : after() || '/dashboard');
+}
+onAct('provider', async (el) => { el.disabled = true; try { await signedIn(await signInWithProvider(el.dataset.p)); } finally { el.disabled = false; } });
+
+route('/login', { shell: 'auth', title: 'Sign in', view: async () => wrap(`<h1>Sign in</h1><p class="dim" style="margin:6px 0 24px">Welcome back.</p>
+  ${await signInOptions('Continue')}<form class="stack" data-form="login" novalidate><div class="field"><label for="l1">Email</label><input id="l1" class="input" type="email" name="email" autocomplete="email" required></div>
   <div class="field"><div class="row between"><label for="l2" class="flabel">Password</label><a class="xs link" href="#/forgot">Forgot password?</a></div><input id="l2" class="input" type="password" name="password" autocomplete="current-password" required></div>
   <div class="form-error"></div><button class="btn primary lg" type="submit">Sign in</button></form>
   <p class="small dim" style="margin-top:20px">New here? <a class="link" href="#/signup">Create an account</a></p>`) });
-onForm('login', async (f) => {
-  const r = await api('/auth/login', { method: 'POST', body: f });
-  if (r.twoFactor) { state.pending2fa = true; return go('/2fa'); }
-  await loadMe(); toast(`Signed in as @${state.me.username}`);
-  go(!state.me.onboarded ? '/onboarding' : after() || '/dashboard');
-});
-route('/signup', { shell: 'auth', title: 'Create account', view: async ({ query }) => wrap(`<h1>Create your account</h1><p class="dim" style="margin:6px 0 24px">Free for players. Only username, email and password are required.</p>
-  ${oauthError(query)}${oauthButtons(await providers(), 'Sign up')}<form class="stack" data-form="signup" novalidate><div class="field"><label for="s1">Email</label><input id="s1" class="input" type="email" name="email" autocomplete="email" required></div>
+onForm('login', async (f) => { await signedIn(await signInWithEmail(String(f.email || '').trim(), f.password || '')); });
+
+route('/signup', { shell: 'auth', title: 'Create account', view: async () => wrap(`<h1>Create your account</h1><p class="dim" style="margin:6px 0 24px">Free for players. Only username, email and password are required.</p>
+  ${await signInOptions('Sign up')}<form class="stack" data-form="signup" novalidate><div class="field"><label for="s1">Email</label><input id="s1" class="input" type="email" name="email" autocomplete="email" required></div>
   <div class="field"><label for="s2">Username</label><input id="s2" class="input mono" name="username" autocomplete="username" required pattern="[A-Za-z0-9_]{3,20}"><span class="hint">3–20 letters, numbers or underscores. Shown on scoreboards.</span></div>
   <div class="field"><label for="s3">Password</label><input id="s3" class="input" type="password" name="password" autocomplete="new-password" required minlength="10" data-input="pwmeter"><span class="hint" id="pwh">At least 10 characters. A passphrase works well.</span></div>
   <div class="form-error"></div><button class="btn primary lg" type="submit">Create account</button></form>
   <p class="small dim" style="margin-top:20px">Already registered? <a class="link" href="#/login">Sign in</a></p>`) });
 onChange('pwmeter', (el) => { const v = el.value; const s = (v.length >= 10) + (v.length >= 14) + (/\d/.test(v) && /[a-z]/i.test(v)) + (/[^a-z0-9]/i.test(v)); document.getElementById('pwh').textContent = ['At least 10 characters. A passphrase works well.', 'Too short.', 'Fair — longer is better.', 'Strong.', 'Very strong.'][v.length < 10 && v ? 1 : s]; });
 onForm('signup', async (f) => {
-  const r = await api('/auth/signup', { method: 'POST', body: f }); await loadMe(); state.devLink = r.devLink; go('/onboarding');
+  const username = String(f.username || '').trim();
+  if (!/^[A-Za-z0-9_]{3,20}$/.test(username)) throw Object.assign(new Error('Username must be 3–20 letters, numbers or underscores.'), { data: { field: 'username' } });
+  if (String(f.password || '').length < 10) throw Object.assign(new Error('Password must be at least 10 characters.'), { data: { field: 'password' } });
+  await signedIn(await signUpWithEmail(String(f.email || '').trim(), f.password, username));
 });
-route('/2fa', { shell: 'auth', title: 'Two-factor authentication', view: () => wrap(`<h1>Two-factor code</h1><p class="dim" style="margin:6px 0 24px">Enter the 6-digit code from your authenticator app.</p>
+
+route('/2fa', { shell: 'auth', title: 'Two-factor authentication', view: () => (hasPendingTwoFactor()
+  ? wrap(`<h1>Two-factor code</h1><p class="dim" style="margin:6px 0 24px">Enter the 6-digit code from your authenticator app.</p>
   <form class="stack" data-form="twofa" novalidate><div class="field"><label for="c1">Code</label><input id="c1" class="input mono flag" name="code" inputmode="numeric" autocomplete="one-time-code" maxlength="6" pattern="\\d{6}" required></div><div class="form-error"></div><button class="btn primary lg" type="submit">Verify</button></form>
-  <p class="small dim" style="margin-top:20px"><a class="link" href="#/login" data-act="logout">Use a different account</a></p>`), mount: () => document.getElementById('c1')?.focus() });
-onForm('twofa', async (f) => { await api('/auth/2fa', { method: 'POST', body: f }); state.pending2fa = false; await loadMe(); toast('Signed in.'); go(after() || '/dashboard'); });
-route('/forgot', { shell: 'auth', title: 'Reset password', view: () => wrap(`<h1>Reset your password</h1><p class="dim" style="margin:6px 0 24px">We'll send a reset link to the email on your account. It works for 2 hours.</p>
+  <p class="small dim" style="margin-top:20px"><a class="link" href="#/login">Use a different account</a></p>`)
+  : wrap(`<h1>Sign in first</h1><p class="dim" style="margin:6px 0 24px">Your sign-in expired before the code was entered.</p><a class="btn primary lg" href="#/login">Sign in</a>`)),
+mount: () => document.getElementById('c1')?.focus() });
+onForm('twofa', async (f) => { await submitTwoFactor(String(f.code || '').trim()); await loadMe(); toast('Signed in.'); go(after() || '/dashboard'); });
+
+route('/forgot', { shell: 'auth', title: 'Reset password', view: () => wrap(`<h1>Reset your password</h1><p class="dim" style="margin:6px 0 24px">We'll email you a link to choose a new password.</p>
   <form class="stack" data-form="forgot" novalidate><div class="field"><label for="f1">Email</label><input id="f1" class="input" type="email" name="email" required></div><div class="form-error"></div><button class="btn primary lg" type="submit">Send reset link</button></form><div id="fres" style="margin-top:16px"></div>`) });
-onForm('forgot', async (f) => { const r = await api('/auth/forgot', { method: 'POST', body: f }); document.getElementById('fres').innerHTML = `<div class="stack"><div class="notice ok">${icon('check')}<div>If an account uses that address, a reset link is on its way.</div></div>${devNote(r.devLink)}</div>`; });
-route('/reset', { shell: 'auth', title: 'Choose a new password', view: ({ query }) => wrap(`<h1>Choose a new password</h1><p class="dim" style="margin:6px 0 24px">You'll be signed out everywhere and asked to sign in again.</p>
-  <form class="stack" data-form="reset" novalidate><input type="hidden" name="token" value="${esc(query.token || '')}"><div class="field"><label for="r1">New password</label><input id="r1" class="input" type="password" name="password" autocomplete="new-password" minlength="10" required></div><div class="form-error"></div><button class="btn primary lg" type="submit">Update password</button></form>`) });
-onForm('reset', async (f) => { await api('/auth/reset', { method: 'POST', body: f }); state.me = null; toast('Password updated. Sign in with your new password.'); go('/login'); });
-route('/verify-email', { shell: 'auth', title: 'Verify email', view: async ({ query }) => {
-  if (query.token) { try { await api('/auth/verify', { method: 'POST', body: { token: query.token } }); if (state.me) await loadMe(); return wrap(`<h1>Email verified</h1><p class="dim" style="margin:10px 0 24px">You can now register for competitions.</p><a class="btn primary lg" href="#/${state.me ? 'dashboard' : 'login'}">Continue</a>`); }
-    catch (e) { return wrap(`<h1>Link not valid</h1><div class="notice err" style="margin:16px 0">${icon('x')}<div>${esc(e.message)}</div></div>${state.me ? '<button class="btn" data-act="resend">Send a new link</button>' : '<a class="btn" href="#/login">Sign in to request a new link</a>'}`); } }
-  return wrap(`<h1>Check your inbox</h1><p class="dim" style="margin:10px 0 24px">We sent a verification link to ${esc(state.me?.email || 'your email')}.</p><button class="btn" data-act="resend">Resend link</button><div id="vlink" style="margin-top:16px"></div>`);
+onForm('forgot', async (f) => {
+  await sendPasswordReset(String(f.email || '').trim());
+  document.getElementById('fres').innerHTML = `<div class="notice ok">${icon('check')}<div>If an account uses that address, a reset link is on its way. Check your spam folder too.</div></div>`;
+});
+
+route('/verify-email', { shell: 'auth', title: 'Verify email', view: async () => {
+  if (state.me && !state.me.emailVerified) { await api('/auth/check-verification', { method: 'POST' }).catch(() => {}); await loadMe(); } // picks up a link opened in another tab
+  if (state.me?.emailVerified) return wrap(`<h1>Email verified</h1><p class="dim" style="margin:10px 0 24px">You can now register for competitions.</p><a class="btn primary lg" href="#/dashboard">Continue</a>`);
+  return wrap(`<h1>Check your inbox</h1><p class="dim" style="margin:10px 0 24px">We sent a verification link to ${esc(state.me?.email || 'your email')}. Open it, then come back here.</p>
+    <div class="row wrap"><button class="btn primary" data-act="recheck">I've verified it</button>${state.me ? '<button class="btn" data-act="resend">Resend link</button>' : '<a class="btn" href="#/login">Sign in</a>'}</div>`);
 } });
-onAct('resend', async () => { const r = await api('/auth/resend-verification', { method: 'POST' }); toast(r.already ? 'Your email is already verified.' : 'Verification link sent.'); const box = document.getElementById('vlink'); if (box) box.innerHTML = devNote(r.devLink); });
+onAct('recheck', async () => { await api('/auth/check-verification', { method: 'POST' }); await loadMe(); if (state.me?.emailVerified) { toast('Email verified.'); refresh(); } else toast("Not verified yet. Open the link in the email, then try again.", 'err'); });
+onAct('resend', async () => { const r = await api('/auth/resend-verification', { method: 'POST' }); toast(r.already ? 'Your email is already verified.' : 'Verification link sent.'); });
 
 /* ---------- onboarding ---------- */
 const OB = { step: 0, data: { interests: [] } };
@@ -68,7 +83,7 @@ route('/onboarding', { shell: 'auth', auth: true, title: 'Set up your profile', 
      <div class="field"><label for="o3">Interface language</label><select id="o3" class="select" name="language">${[['en', 'English'], ['es', 'Español'], ['fr', 'Français'], ['de', 'Deutsch'], ['pt', 'Português'], ['ja', '日本語'], ['ko', '한국어'], ['id', 'Bahasa Indonesia']].map(([k, v]) => `<option value="${k}" ${(d.language || me.language) === k ? 'selected' : ''}>${v}</option>`).join('')}</select><span class="hint">Event content stays in the organizer's language.</span></div>`,
     `<div class="choice">${[['beginner', 'Beginner', 'New to CTFs'], ['intermediate', 'Intermediate', 'Played a few events'], ['advanced', 'Advanced', 'Regularly place well'], ['professional', 'Professional', 'Work in security']].map(([v, l, h]) => `<label><input type="radio" name="experience" value="${v}" ${(d.experience || me.experience) === v ? 'checked' : ''}><div><b>${l}</b><span>${h}</span></div></label>`).join('')}</div>`,
     `<div class="choice c2">${Object.entries(CAT).map(([k, [code, name]]) => `<label><input type="checkbox" name="interests" value="${k}" ${d.interests.includes(k) ? 'checked' : ''}><div><b>${name}</b><span class="mono">${code}</span></div></label>`).join('')}</div>`][s];
-  return `<div class="page narrow" style="max-width:600px;padding-top:48px">${state.devLink && !me.emailVerified ? `<div style="margin-bottom:20px">${devNote(state.devLink)}</div>` : ''}
+  return `<div class="page narrow" style="max-width:600px;padding-top:48px">${!me.emailVerified ? `<div class="notice info" style="margin-bottom:20px">${icon('info')}<div>We sent a verification link to <b>${esc(me.email || 'your email')}</b>. Verify it to register for competitions.</div></div>` : ''}
     <div class="row" style="gap:4px;margin-bottom:24px">${steps.map((x, i) => `<div class="grow"><div class="bar ${i < s ? 'ok' : ''}"><i style="width:${i <= s ? 100 : 0}%"></i></div><div class="xs ${i === s ? '' : 'faint'}" style="margin-top:6px">${i + 1}. ${x}</div></div>`).join('')}</div>
     <h1>${['Tell us about you', 'How much CTF have you played?', 'What do you like to solve?'][s]}</h1><p class="dim" style="margin:6px 0 22px">Everything here is optional and can be changed in Settings.</p>
     <form class="stack" data-form="onboard" novalidate>${body}<div class="form-error"></div><div class="row between" style="margin-top:12px">${s ? '<button type="button" class="btn ghost" data-act="obback">Back</button>' : '<button type="button" class="btn ghost" data-act="obskip">Skip setup</button>'}<button class="btn primary" type="submit">${s < 2 ? 'Continue' : 'Finish'}</button></div></form></div>`;

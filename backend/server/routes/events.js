@@ -156,7 +156,7 @@ r.get('/events/:slug/challenges', async (req, res) => {
   if (!req.user) throw new HttpError(401, 'Please sign in.');
   const b = await boardFor(e, req.user);
   const pinned = await findOne('announcements', { event_id: e.id, pinned: 1 }, { projection: { title: 1, body: 1 }, sort: { id: -1 } });
-  res.json({ challenges: b.challenges, team: b.team, phase: phase(e), endsAt: e.ends_at, accepting: !!e.accepting, pinned: pinned || null });
+  res.json({ challenges: b.challenges, team: b.team, phase: phase(e), endsAt: e.ends_at, isPractice: !!e.is_practice, accepting: !!e.accepting, pinned: pinned || null });
 });
 
 async function loadChallenge(e, req, { mustCompete = true } = {}) {

@@ -20,14 +20,14 @@ Other commands:
 npm run dev          # restart on file changes
 npm run bootstrap    # create the admin from ADMIN_* without starting the server
 npm run seed:practice # create/top up the always-open Practice Arena (22 challenges, all categories)
-npm test             # 52 tests: platform, OAuth against a fake GitHub, and every practice challenge solved from its files on a throwaway database that is dropped afterwards
+npm test             # 50 tests on a throwaway database: platform, Firebase sign-in rules and migration (against an in-memory Firebase), and every practice challenge solved from its files
 ```
 
 If `mongodb+srv://` URIs fail with `querySrv ECONNREFUSED`, your system resolver can't answer SRV lookups from Node; set `DNS_SERVERS=1.1.1.1,8.8.8.8`.
 
 ## What works
 
-**Players** — sign up, email verification, sign-in with a password or GitHub / Google, optional TOTP two-factor, linked accounts, onboarding, profile and session management; browse and filter competitions; register solo or as a team (open, approval-based or invitation code); teams with owner/captain/member roles, invites by username or code, ownership transfer and roster rules; challenge board with category, solved and locked states; flag submission with distinct results (correct, incorrect, already solved, rate limited, submissions paused); hints with point costs; file downloads with SHA-256; per-team instances; live scoreboard with rank changes, top-five progression and a projector view; announcements and notifications in real time; practice sets that never count toward rankings; certificates with public verification.
+**Players** — sign up, email verification, sign-in through Firebase Authentication (email and password, Google, GitHub), optional TOTP two-factor, linked sign-in methods, onboarding, profile and session management; browse and filter competitions; register solo or as a team (open, approval-based or invitation code); teams with owner/captain/member roles, invites by username or code, ownership transfer and roster rules; challenge board with category, solved and locked states; flag submission with distinct results (correct, incorrect, already solved, rate limited, submissions paused); hints with point costs; file downloads with SHA-256; per-team instances; live scoreboard with rank changes, top-five progression and a projector view; announcements and notifications in real time; practice sets that never count toward rankings; certificates with public verification.
 
 **Organizers** — six-step event wizard (drafts, publish checklist); challenge editor with Markdown preview, static / regex / per-team dynamic flags, hints, uploads, dynamic scoring per challenge, scheduled releases and unlock prerequisites, and a flag tester; registration approval, disqualification and score adjustments; submission monitor; integrity review queue with evidence, notes, status and explicit actions; announcements; staff roles (organizer, author, moderator); scoreboard freeze; CSV exports; certificate issuing.
 
@@ -41,9 +41,9 @@ If `mongodb+srv://` URIs fail with `querySrv ECONNREFUSED`, your system resolver
 - **Dynamic flags** are `PREFIX{hmac(app_secret + challenge_secret, challenge:team)[0:16]}`. If a team submits a flag that was generated for another team, the server raises a high-severity integrity signal.
 - **Integrity signals** (flag sharing, the same IP solving for different teams, bursts of throttled submissions) go to a review queue. Nothing is penalized automatically; actions are explicit, logged, and the affected team is told how to appeal.
 - **Scoring**: dynamic challenges use the CTFd-style quadratic decay `value = initial + (min − initial) / decay² × solves²`, floored at `min`, applied to every solver. First-blood bonus is a percentage. Hint costs and manual adjustments are subtracted or added. Ties go to whoever reached the score first.
-- **OAuth sign-in** (GitHub, Google) uses the authorization-code flow with PKCE. The SPA asks `POST /api/auth/oauth/:provider/start` for the provider URL; the server stores a hashed one-time state (10-minute TTL) and also sets it in an `HttpOnly` cookie scoped to `/api/auth/oauth`, so the callback only completes in the browser that started it. A first sign-in creates an account with no password and a verified email. If a user with the same email already exists, the identity is linked automatically only when both the provider and the local account have verified that address, so nobody can pre-register someone else's email and inherit their sign-ins. Two-factor still applies, and an account can't unlink its only sign-in method until it sets a password. Identities live in `oauth_identities`.
+- **Sign-in is Firebase Authentication.** Firebase stores everything about logging in: emails and passwords, Google/GitHub links, email verification and password resets (Firebase sends those emails), and sessions. The browser signs in with the Firebase JS SDK (pinned, in-memory persistence, nothing in localStorage) and sends the short-lived ID token to `POST /api/auth/firebase`; the server verifies it and sets a Firebase **session cookie** (`HttpOnly`). MongoDB keeps the profile (username, role, status, onboarding) linked by `users.firebase_uid`, plus a copy of the email and its verified flag for admin search. A new sign-in links to an existing profile by email only when both sides verified the address. Two-factor secrets live in the Realtime Database under `auth_private/{uid}`, which clients can never read.
 - **Rate limits**: 5 submissions per minute per team per challenge (configurable), login limits per IP and per account, 2FA attempts, instance requests.
-- **Sessions** are random tokens in an `HttpOnly; SameSite=Lax` cookie (stored hashed). Every mutating request must carry an `X-CA-CSRF` header, which a cross-site page cannot set. Passwords use bcrypt.
+- **Sessions** are Firebase session cookies (`HttpOnly; SameSite=Lax`, up to 14 days). Their signature is checked on every request and revocation at most once a minute per session; suspending a user disables their Firebase account and revokes every session. Every mutating request must carry an `X-CA-CSRF` header, which a cross-site page cannot set.
 - **Security headers**: strict CSP (no inline scripts; the frontend uses event delegation), `X-Frame-Options: DENY`, `nosniff`, HSTS in production.
 - **Realtime** uses Server-Sent Events (`/api/stream`): solves, announcements, notifications, integrity signals for staff.
 
@@ -51,18 +51,18 @@ If `mongodb+srv://` URIs fail with `querySrv ECONNREFUSED`, your system resolver
 
 Set `INSTANCE_PROVIDER=docker` on a host with Docker. For a challenge with an image and port, each team gets its own container started with `docker run -d --rm --memory 256m --cpus 0.5 --pids-limit 128 -p 0:<port> -e FLAG=<team flag>`. Instances expire after the challenge's lifetime (default 45 minutes), can be extended twice by 30 minutes, and are stopped by a reaper. Set `INSTANCE_HOST` to the hostname players should connect to. With the default `none`, instance challenges tell players that instances are not enabled.
 
-## Sign in with GitHub / Google
+## Sign-in setup (Firebase Authentication)
 
-Create an OAuth app with each provider and set its client id and secret in `.env` (`GITHUB_CLIENT_ID` / `GITHUB_CLIENT_SECRET`, `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET`). The buttons appear on the sign-in and sign-up pages once a provider is configured.
-
-- **GitHub**: Settings → Developer settings → OAuth Apps → New. Homepage URL `BASE_URL`, callback URL `BASE_URL/api/auth/oauth/github/callback`.
-- **Google**: Cloud Console → APIs & Services → Credentials → OAuth client ID (Web application). Authorized redirect URI `BASE_URL/api/auth/oauth/google/callback`. The scopes are `openid email profile`.
-
-`BASE_URL` must be the public URL of the backend. If the frontend is served from somewhere else, set `FRONTEND_URL` too.
+1. In the Firebase console, open **Authentication > Sign-in method** and enable **Email/Password**, plus **Google** and/or **GitHub** if you want those buttons (GitHub needs an OAuth app; Firebase shows the callback URL to use).
+2. Under **Authentication > Settings > Authorized domains**, add `localhost` and your public domain.
+3. Copy the web app config (Project settings > Your apps > Web app) into `FIREBASE_WEB_API_KEY`, `FIREBASE_AUTH_DOMAIN`, `FIREBASE_PROJECT_ID` and `FIREBASE_APP_ID`, and list the buttons in `FIREBASE_SIGNIN_PROVIDERS`.
+4. Put the service account key at `backend/serviceAccountKey.json` and run `npm run verify`.
+5. Lock the Realtime Database so browsers can't read it (the server bypasses rules): `{ "rules": { ".read": false, ".write": false } }`.
+6. **Existing accounts:** `npm run migrate:auth -- --dry-run`, then `npm run migrate:auth`. Passwords keep working (the bcrypt hashes are imported), GitHub/Google links and 2FA secrets move too. Once people can sign in, `npm run migrate:auth -- --cleanup` deletes the old hashes and session collections from MongoDB.
 
 ## Email
 
-There is no mail sender built in. Verification and password-reset links are printed to the server log, and outside production they are also shown in the UI so the flow can be completed locally. To send real email, replace the `console.log` in `issueEmailToken` (`server/routes/auth.js`) with your SMTP or API client.
+Firebase sends verification and password-reset emails (customise them under Authentication > Templates). The app has no other mail sender.
 
 ## Deploying
 
@@ -73,7 +73,7 @@ docker run -p 3000:3000 -v cipherarena-data:/data -e MONGODB_URI='mongodb+srv://
 
 Run it behind HTTPS (Caddy, nginx) and set `TRUST_PROXY=1` so rate limits and IP evidence see real client addresses. `NODE_ENV=production` turns on secure cookies and HSTS and hides dev links. Back up the MongoDB database (it also holds the generated dynamic-flag secret unless you set `APP_SECRET`) and `DATA_DIR/uploads` (challenge attachments). All settings are listed in `.env.example`.
 
-Sessions and email tokens expire through MongoDB TTL indexes, so they don't pile up in storage. Run the server close to the database (same cloud region): requests make several small queries, so latency adds up. Scoreboards are computed per request; for very large events put a short cache in front of `/api/events/:slug/scoreboard`.
+Run the server close to the database (same cloud region): requests make several small queries, so latency adds up. Scoreboards are computed per request; for very large events put a short cache in front of `/api/events/:slug/scoreboard`.
 
 ## Layout
 
@@ -82,16 +82,17 @@ server/
   index.js          HTTP server, security headers, error handling
   config.js         environment configuration
   db.js             MongoDB connection, indexes, numeric ids, helpers, audit log, notifications
-  lib.js            validation, sessions, auth middleware, rate limits, TOTP
+  lib.js            validation, session cookie middleware, rate limits, TOTP
+  identity.js       Firebase Authentication: sign-in tokens, session cookies, revocation, 2FA secret store
   core.js           permissions, phases, scoring, flag checks, integrity signals, SSE hub
   instances.js      per-team container instances
-  oauth.js          GitHub / Google OAuth providers (PKCE, token exchange, profile)
-  routes/           auth, oauth, events (arena), teams, manage (organizer), platform (orgs, admin)
+  routes/           signin (Firebase sign-in, 2FA), auth (profile, notifications), events (arena), teams, manage (organizer), platform (orgs, admin)
 public/
   index.html, css/app.css, js/core.js (router, API client), js/ui.js, js/views/*
 scripts/bootstrap.js first platform admin from ADMIN_* settings
 test/api.test.js    end-to-end API tests (fixtures in test/fixtures.js)
-test/oauth.test.js  OAuth sign-in tests against a fake GitHub
+test/identity.test.js Firebase sign-in rules and account migration (test/fake-identity.js is the in-memory Firebase)
+scripts/migrate-auth-to-firebase.js  moves existing accounts' sign-in data into Firebase
 test/practice.test.js solves each practice challenge from its description and files only
 scripts/seed-practice.js + scripts/practice/  practice challenges and their generated files (PNG, pcap, UART capture)
 scripts/practice/private/  gitignored: new practice challenges whose flags must stay out of the public repo (see its README)
@@ -99,7 +100,7 @@ scripts/practice/private/  gitignored: new practice challenges whose flags must 
 
 ## Not included
 
-Payments (events can show a fee note; collecting it is up to you), an SMTP sender, OAuth providers beyond GitHub and Google, attack-defense format, and a writeup editor.
+Payments (events can show a fee note; collecting it is up to you), sign-in providers beyond email, Google and GitHub, attack-defense format, and a writeup editor.
 
 ## Frontend design system ("studio canvas")
 

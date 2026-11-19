@@ -36,6 +36,31 @@ This document explains how to set up, configure, and run CipherArena with its hy
 
 ---
 
+## 2b. Firebase Authentication (sign-in)
+
+All sign-in data lives in Firebase: passwords, Google/GitHub links, email verification, sessions and two-factor secrets. MongoDB only keeps the profile.
+
+1. **Authentication > Sign-in method**: enable Email/Password, and Google and/or GitHub if you want those buttons.
+2. **Authentication > Settings > Authorized domains**: add `localhost` and your production domain.
+3. **Project settings > Your apps**: add a Web app and copy its config into `backend/.env`:
+   ```env
+   FIREBASE_WEB_API_KEY=...
+   FIREBASE_AUTH_DOMAIN=<project-id>.firebaseapp.com
+   FIREBASE_PROJECT_ID=<project-id>
+   FIREBASE_APP_ID=...
+   FIREBASE_SIGNIN_PROVIDERS=google,github
+   ```
+4. **Realtime Database > Rules**: deny all client access. The server uses the Admin SDK, which ignores rules:
+   ```json
+   { "rules": { ".read": false, ".write": false } }
+   ```
+5. **Move existing accounts** (once):
+   ```bash
+   npm run migrate:auth -- --dry-run   # see what would happen
+   npm run migrate:auth                # passwords, GitHub/Google links and 2FA secrets move to Firebase
+   npm run migrate:auth -- --cleanup   # later: remove the old copies from MongoDB
+   ```
+
 ## 3. MongoDB Configuration (Core Competition Data)
 
 1. **Local MongoDB**:
