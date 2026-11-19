@@ -198,8 +198,9 @@ export async function pushAuditToFirebase(entry) {
   try {
     const auditRef = ref('audit_log');
     const newRef = auditRef.push();
+    const { ip: _ip, ...rest } = entry; // client IPs stay in MongoDB only
     await newRef.set({
-      ...entry,
+      ...rest,
       firebase_id: newRef.key,
       synced_at: Date.now(),
     });

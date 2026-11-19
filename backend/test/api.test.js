@@ -46,6 +46,20 @@ test('signup → verify email → onboarding profile', async () => {
   assert.equal((await c('/me', { method: 'PATCH', body: { interests: ['web', 'nope'], experience: 'beginner', onboarded: true } })).data.user.interests.join(), 'web');
   assert.equal((await c('/auth/signup', { method: 'POST', body: { email: 'new@x.test', username: 'other_1', password: 'correct horse battery' } })).status, 400);
 });
+test('session token stays in the HttpOnly cookie: never in a response body, never accepted from a header', async () => {
+  const res = await fetch(`${base}/auth/login`, { method: 'POST', headers: { 'X-CA-CSRF': '1', 'Content-Type': 'application/json' }, body: JSON.stringify({ login: 'k3rnel_v', password: PASSWORD }) });
+  const body = await res.json();
+  const cookie = res.headers.get('set-cookie');
+  assert.match(cookie, /HttpOnly/);
+  const token = cookie.split(';')[0].split('=')[1];
+  assert.equal(body.token, undefined); assert.ok(!JSON.stringify(body).includes(token));
+  for (const headers of [{ Authorization: `Bearer ${token}` }, { 'X-CA-Token': token }]) {
+    const me = await (await fetch(`${base}/auth/me`, { headers })).json();
+    assert.equal(me.user, null, `token in ${Object.keys(headers)[0]} must not sign in`);
+  }
+  const viaCookie = await (await fetch(`${base}/auth/me`, { headers: { cookie: `ca_session=${token}` } })).json();
+  assert.equal(viaCookie.user.username, 'k3rnel_v');
+});
 test('wrong password is rejected without revealing which part', async () => {
   const r = await client()('/auth/login', { method: 'POST', body: { login: 'k3rnel_v', password: 'nope' } });
   assert.equal(r.status, 401); assert.match(r.data.error, /username or password/);

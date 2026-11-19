@@ -27,27 +27,8 @@ route('/login', { shell: 'auth', title: 'Sign in', view: async ({ query }) => wr
 onForm('login', async (f) => {
   const r = await api('/auth/login', { method: 'POST', body: f });
   if (r.twoFactor) { state.pending2fa = true; return go('/2fa'); }
-  if (r.token) {
-    sessionStorage.setItem('ca_token', r.token);
-    localStorage.setItem('ca_token', r.token);
-  }
-  if (r.user) state.me = r.user;
-  try {
-    await loadMe();
-  } catch {
-    // continue with r.user if /auth/me encounters any transient delay
-  }
-  const me = state.me || r.user || {
-    id: 1,
-    username: f.login,
-    displayName: f.login,
-    role: f.login === 'admin' ? 'admin' : 'participant',
-    onboarded: true,
-  };
-  state.me = me;
-  try { localStorage.setItem('ca_user', JSON.stringify(me)); } catch {}
-  toast(`Signed in as @${me.username}`);
-  go(!me.onboarded ? '/onboarding' : after() || '/dashboard');
+  await loadMe(); toast(`Signed in as @${state.me.username}`);
+  go(!state.me.onboarded ? '/onboarding' : after() || '/dashboard');
 });
 route('/signup', { shell: 'auth', title: 'Create account', view: async ({ query }) => wrap(`<h1>Create your account</h1><p class="dim" style="margin:6px 0 24px">Free for players. Only username, email and password are required.</p>
   ${oauthError(query)}${oauthButtons(await providers(), 'Sign up')}<form class="stack" data-form="signup" novalidate><div class="field"><label for="s1">Email</label><input id="s1" class="input" type="email" name="email" autocomplete="email" required></div>
@@ -57,12 +38,7 @@ route('/signup', { shell: 'auth', title: 'Create account', view: async ({ query 
   <p class="small dim" style="margin-top:20px">Already registered? <a class="link" href="#/login">Sign in</a></p>`) });
 onChange('pwmeter', (el) => { const v = el.value; const s = (v.length >= 10) + (v.length >= 14) + (/\d/.test(v) && /[a-z]/i.test(v)) + (/[^a-z0-9]/i.test(v)); document.getElementById('pwh').textContent = ['At least 10 characters. A passphrase works well.', 'Too short.', 'Fair — longer is better.', 'Strong.', 'Very strong.'][v.length < 10 && v ? 1 : s]; });
 onForm('signup', async (f) => {
-  const r = await api('/auth/signup', { method: 'POST', body: f });
-  if (r.token) sessionStorage.setItem('ca_token', r.token);
-  if (r.user) state.me = r.user;
-  await loadMe();
-  state.devLink = r.devLink;
-  go('/onboarding');
+  const r = await api('/auth/signup', { method: 'POST', body: f }); await loadMe(); state.devLink = r.devLink; go('/onboarding');
 });
 route('/2fa', { shell: 'auth', title: 'Two-factor authentication', view: () => wrap(`<h1>Two-factor code</h1><p class="dim" style="margin:6px 0 24px">Enter the 6-digit code from your authenticator app.</p>
   <form class="stack" data-form="twofa" novalidate><div class="field"><label for="c1">Code</label><input id="c1" class="input mono flag" name="code" inputmode="numeric" autocomplete="one-time-code" maxlength="6" pattern="\\d{6}" required></div><div class="form-error"></div><button class="btn primary lg" type="submit">Verify</button></form>

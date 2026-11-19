@@ -27,7 +27,7 @@ export function createApp() {
     app.use(cors({
       origin: config.corsOrigin,
       credentials: true,
-      allowedHeaders: ['Content-Type', 'X-CA-CSRF', 'Authorization', 'X-CA-Token'],
+      allowedHeaders: ['Content-Type', 'X-CA-CSRF'],
     }));
   }
 

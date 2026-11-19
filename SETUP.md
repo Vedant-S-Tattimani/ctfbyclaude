@@ -84,7 +84,7 @@ This document explains how to set up, configure, and run CipherArena with its hy
    # --- Initial Platform Admin ---
    ADMIN_USERNAME=admin
    ADMIN_EMAIL=admin@example.org
-   ADMIN_PASSWORD=admin123
+   ADMIN_PASSWORD=<at least 10 characters, a long passphrase>
 
    # --- Server Settings ---
    PORT=3000

@@ -115,9 +115,9 @@ export function clearSessionCookie(res) { res.setHeader('Set-Cookie', `${COOKIE}
 
 // Attaches req.user (full session) or req.pendingUser (password ok, 2FA outstanding).
 export async function sessionMiddleware(req, _res, next) {
-  const authHeader = req.headers.authorization;
-  const bearerToken = authHeader && authHeader.startsWith('Bearer ') ? authHeader.slice(7).trim() : null;
-  const token = parseCookies(req.headers.cookie)[COOKIE] || req.headers['x-ca-token'] || bearerToken;
+  // Sessions come only from the HttpOnly cookie. Never accept the token from a header or return it in a body:
+  // anything page scripts can read, an injected script could steal.
+  const token = parseCookies(req.headers.cookie)[COOKIE];
   req.user = null; req.pendingUser = null;
   if (token) {
     const s = await findOne('sessions', { token_hash: sha256(token) });
