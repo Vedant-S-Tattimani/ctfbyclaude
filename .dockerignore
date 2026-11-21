@@ -1,4 +1,31 @@
-node_modules
-data
-.env
+# Keep the image small, reproducible and free of secrets.
+# Patterns use **/ so they match inside backend/ and frontend/ too.
+
+# Dependencies are installed inside the image (Linux), never copied from a laptop.
+**/node_modules
+
+# Secrets: passed in at run time (env_file / Compose secret), never baked into the image.
+**/.env
+**/.env.*
+!**/.env.example
+**/serviceAccountKey*.json
+**/*firebase-adminsdk*.json
+
+# Local data, uploads and logs
+**/data
+**/*.log
+
+# Practice challenges with secret flags
+backend/scripts/practice/private/*
+!backend/scripts/practice/private/README.md
+
+# Repo and tooling noise
 .git
+.github
+.claude
+docs
+**/test
+**/.DS_Store
+docker-compose*.yml
+Dockerfile
+.dockerignore

@@ -2,7 +2,29 @@
 
 Separated into **backend** (Node.js/Express API) and **frontend** (vanilla JS SPA).
 
-## Quick Start
+## Quick Start with Docker (recommended)
+
+Works the same on Windows, macOS and Linux. You only need [Docker Desktop](https://www.docker.com/products/docker-desktop/), no Node.js or MongoDB install. The database runs in its own container.
+
+1. Clone the repo and open a terminal in the project folder.
+2. Create your settings file from the example:
+   ```bash
+   cp backend/.env.example backend/.env       # Windows PowerShell: Copy-Item backend/.env.example backend/.env
+   ```
+   Fill in the `FIREBASE_WEB_*` values and `ADMIN_USERNAME` / `ADMIN_EMAIL` / `ADMIN_PASSWORD` (see [SETUP.md](SETUP.md)).
+   You can leave `MONGODB_URI` empty: Docker uses its own MongoDB.
+3. Put the Firebase service account key at `backend/serviceAccountKey.json` (Firebase console → Project settings → Service accounts → Generate new private key).
+4. Start everything:
+   ```bash
+   docker compose up --build
+   ```
+5. Open http://localhost:3000. The first start creates the admin from `ADMIN_*`.
+
+Stop with `Ctrl+C`. Start again later with `docker compose up`. Wipe the local database and uploads with `docker compose down -v`.
+
+`backend/.env` and `backend/serviceAccountKey.json` are secrets: they are git-ignored and never copied into the Docker image (see `.dockerignore`). Share them privately, or let each developer use their own Firebase project.
+
+## Quick Start without Docker
 
 ```bash
 # 1. Install backend dependencies and configure the database

@@ -1,0 +1,52 @@
+# Local development with Docker: the app plus its own MongoDB, the same on every laptop.
+#
+#   1. cp backend/.env.example backend/.env     (fill in the Firebase values; see SETUP.md)
+#   2. put the Firebase key at backend/serviceAccountKey.json
+#   3. docker compose up --build                 then open http://localhost:3000
+#
+# MongoDB runs in a container (data kept in the "mongo-data" volume), so no Atlas account is needed.
+# Sign-in still uses your Firebase project. Stop with Ctrl+C; wipe local data with: docker compose down -v
+
+services:
+  mongo:
+    image: mongo:7
+    restart: unless-stopped
+    volumes:
+      - mongo-data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  app:
+    build: .
+    depends_on:
+      mongo:
+        condition: service_healthy
+    ports:
+      - "3000:3000"
+    env_file:
+      - backend/.env
+    environment:
+      # These override backend/.env so the app uses the local MongoDB and plain-HTTP cookies.
+      MONGODB_URI: mongodb://mongo:27017
+      MONGODB_DB: cipherarena
+      NODE_ENV: development
+      COOKIE_SECURE: "0"
+      TRUST_PROXY: "0"
+      BASE_URL: http://localhost:3000
+      DNS_SERVERS: ""
+      FIREBASE_SERVICE_ACCOUNT_PATH: /run/secrets/firebase_service_account
+    secrets:
+      - firebase_service_account
+    volumes:
+      - app-data:/data
+
+secrets:
+  firebase_service_account:
+    file: backend/serviceAccountKey.json
+
+volumes:
+  mongo-data:
+  app-data:
