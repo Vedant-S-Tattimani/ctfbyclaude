@@ -1,6 +1,7 @@
 // Organization administration and platform administration.
 import { api, route, state, refresh, ctx, onAct, onForm, onChange, sideExtra, loadMe } from '../core.js';
 import { esc, fmt, icon, tag, phaseTag, dateFmt, dtFmt, ago, av, toast, dialog, confirmDlg, areaChart, hbars } from '../ui.js';
+import { deleteEventFlow } from './manage.js';
 
 /* ---------- organization admin ---------- */
 const ROLE_HELP = { owner: 'Everything, including deleting the org', admin: 'Members, branding, all events', organizer: 'Creates and runs events', author: 'Writes challenges for org events', member: 'Sees private events' };
@@ -58,11 +59,12 @@ route('/admin/orgs', { ...AD, title: 'Organizations', view: async () => {
 onAct('over', async (el) => { await api(`/admin/orgs/${el.dataset.slug}`, { method: 'PATCH', body: { verified: el.dataset.v === '1' } }); toast('Updated.'); refresh(); });
 route('/admin/events', { ...AD, title: 'Events', view: async () => {
   const { events } = await api('/admin/events');
-  return `<div class="page"><div class="pagehead"><div><h1>Events</h1><p>Suspending hides an event and stops submissions. Its staff are notified with your reason.</p></div></div><div class="panel tablewrap"><table class="t"><thead><tr><th>Event</th><th>Organization</th><th>Status</th><th>Visibility</th><th class="r">Teams</th><th></th></tr></thead><tbody>
+  return `<div class="page"><div class="pagehead"><div><h1>Events</h1><p>Suspending hides an event and stops submissions. Its staff are notified with your reason. Deleting removes the event and all its data from the database for good.</p></div></div><div class="panel tablewrap"><table class="t"><thead><tr><th>Event</th><th>Organization</th><th>Status</th><th>Visibility</th><th class="r">Teams</th><th></th></tr></thead><tbody>
     ${events.map((e) => `<tr><td><a href="#/manage/${esc(e.slug)}"><b>${esc(e.name)}</b></a><div class="xs dim mono">${dateFmt(e.starts_at)}</div></td><td class="small">${esc(e.org || 'Independent')}</td><td>${e.status === 'published' ? phaseTag(e.phase, e.is_practice) : tag(e.status, e.status === 'suspended' ? 'crit' : 'warn')}</td><td class="small">${esc(e.visibility)}</td><td class="num">${e.teams}</td>
-      <td class="r">${e.status === 'suspended' ? `<button class="btn sm" data-act="evres" data-slug="${esc(e.slug)}">Restore</button>` : `<button class="btn danger sm" data-act="evsus" data-slug="${esc(e.slug)}" data-name="${esc(e.name)}">Suspend</button>`}</td></tr>`).join('')}</tbody></table></div></div>`;
+      <td class="r"><div class="row" style="justify-content:flex-end;gap:8px;flex-wrap:nowrap">${e.status === 'suspended' ? `<button class="btn sm" data-act="evres" data-slug="${esc(e.slug)}">Restore</button>` : `<button class="btn danger sm" data-act="evsus" data-slug="${esc(e.slug)}" data-name="${esc(e.name)}">Suspend</button>`}<button class="btn danger sm" data-act="evdel" data-slug="${esc(e.slug)}" data-name="${esc(e.name)}" aria-label="Delete ${esc(e.name)}">${icon('trash')}Delete</button></div></td></tr>`).join('') || '<tr><td colspan="6"><div class="empty">No events.</div></td></tr>'}</tbody></table></div></div>`;
 } });
 onAct('evsus', async (el) => { const r = await dialog({ title: `Suspend ${el.dataset.name}?`, body: `<div class="field"><label for="er">Reason sent to the event staff</label><textarea id="er" class="textarea" name="reason" required></textarea></div>`, actions: [{ label: 'Cancel', kind: 'ghost', value: null }, { label: 'Suspend event', kind: 'danger', value: 'go', submit: true }] }); if (r.value !== 'go') return; await api(`/admin/events/${el.dataset.slug}`, { method: 'PATCH', body: { status: 'suspended', reason: r.form.get('reason') } }); toast('Event suspended.'); refresh(); });
+onAct('evdel', async (el) => { if (await deleteEventFlow(el.dataset.slug, el.dataset.name)) refresh(); });
 onAct('evres', async (el) => { const r = await api(`/admin/events/${el.dataset.slug}`, { method: 'PATCH', body: { status: 'restore' } }); toast(r.status === 'published' ? 'Event restored and published again.' : 'Event restored as a draft.'); refresh(); });
 let AQ = '';
 route('/admin/audit', { ...AD, title: 'Audit log', view: async () => {

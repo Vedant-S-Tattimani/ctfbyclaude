@@ -318,15 +318,17 @@ onForm('esettings', async (f) => {
   for (const k of ['team_min', 'team_max', 'first_blood_pct', 'max_teams']) body[k] = f[k] === '' ? null : Number(f[k]);
   await api(`/manage/events/${ctx.params.slug}`, { method: 'PATCH', body }); toast('Settings saved.'); refresh();
 });
-onAct('evdelete', async () => {
-  const slug = ctx.params.slug;
-  const r = await dialog({ title: 'Delete this event?', body: `<p class="dim">This permanently deletes the event and all its challenges, files, registrations, submissions, scores, announcements and certificates. It cannot be undone.</p>
+/** Asks to type the slug, then permanently deletes the event and all its data. Resolves true when deleted. */
+export async function deleteEventFlow(slug, name = slug) {
+  const r = await dialog({ title: `Delete ${name}?`, body: `<p class="dim">This permanently deletes the event and all its challenges, files, registrations, submissions, scores, announcements and certificates. It cannot be undone.</p>
     <div class="field"><label for="dc">Type <b class="mono">${esc(slug)}</b> to confirm</label><input id="dc" class="input mono" name="confirm" autocomplete="off" required></div><div class="form-error"></div>`,
   actions: [{ label: 'Cancel', kind: 'ghost', value: null }, { label: 'Delete forever', kind: 'danger', value: 'go', submit: true, validate: (f) => { if (f.confirm.value.trim().toLowerCase() === slug) return true; f.querySelector('.form-error').innerHTML = `<div class="notice err">${icon('alert')}<div>Type ${esc(slug)} exactly.</div></div>`; return false; } }] });
-  if (r.value !== 'go') return;
+  if (r.value !== 'go') return false;
   await api(`/manage/events/${slug}`, { method: 'DELETE', body: { confirm: slug } });
-  sideExtra.manage = null; toast('Event deleted.'); go('/manage');
-});
+  toast('Event deleted. Its data has been removed from the database.');
+  return true;
+}
+onAct('evdelete', async () => { if (await deleteEventFlow(ctx.params.slug)) { sideExtra.manage = null; go('/manage'); } });
 onForm('staffadd', async (f) => { await api(`/manage/events/${ctx.params.slug}/staff`, { method: 'POST', body: f }); toast('Staff member added.'); refresh(); });
 onAct('staffdel', async (el) => { if (!(await confirmDlg('Remove from staff?', 'They lose organizer access to this event.', 'Remove', true))) return; await api(`/manage/events/${ctx.params.slug}/staff/${el.dataset.uid}`, { method: 'DELETE' }); refresh(); });
 route('/manage/:slug/scoreboard', { ...M, view: ({ params }) => { go(`/arena/${params.slug}/scoreboard`); return ''; } });
