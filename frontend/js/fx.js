@@ -17,7 +17,7 @@ function initRulerMark() {
 }
 
 /* ---------- scroll reveal ---------- */
-const AUTO = '.page > .pagehead, .page > .cells, .page > .panel, .page > .notice, .page > .tabs, .page > .wizard, .board .col, .evlist > *, .sec2 .head, .statement, .blocks, .stats-row > *, .fcard, .notes > *, .cta-card, .hand-title, .cells.c4 > *, .cells.c5 > *, .cells.c3 > *';
+const AUTO = '.page > .pagehead, .page > .cells, .page > .panel, .page > .notice, .page > .tabs, .page > .wizard, .board .col, .evlist > *, .sec2 .head, .statement, .blocks, .stats-row > *, .fcard, .notes > *, .hand-title, .cells.c4 > *, .cells.c5 > *, .cells.c3 > *';
 let io = null;
 function reveal(root = document) {
   if (reduce) return;

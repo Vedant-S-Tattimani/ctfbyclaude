@@ -59,6 +59,32 @@ const BLOB = `<svg viewBox="0 0 200 200" aria-hidden="true"><g class="body"><cir
   <g class="eyes"><rect class="eye" x="78" y="74" width="15" height="34" rx="7.5"/><rect class="eye" x="104" y="74" width="15" height="34" rx="7.5"/></g></svg>`;
 // Community chat the "Join community" banner links to.
 const COMMUNITY_URL = 'https://chat.whatsapp.com/LWTQd0khwsSFiRHOYR1s7r';
+/** Home-page community card: the pitch on the left, an illustrative group-chat window on the right. */
+function crewCard(stats) {
+  const msg = (i, who, text, c) => `<div class="msg" style="--i:${i}"><span class="av" style="--c:var(--${c})">${who[1].toUpperCase()}</span><div><b>${who}</b>${text}</div></div>`;
+  return `<div class="crew" data-reveal>
+    <div class="crew-copy">
+      <span class="crew-tag"><i class="dot"></i>#community · WhatsApp</span>
+      <h2 class="crew-h">Find your <span class="hl">team</span>.</h2>
+      <p>Chat with other players, team up for the next CTF and hear about new competitions first.</p>
+      <ul class="crew-perks"><li>Teammate requests</li><li>New competition alerts</li><li>Writeups after events</li></ul>
+      <div class="crew-actions"><a class="btn primary lg" href="${COMMUNITY_URL}" target="_blank" rel="noopener noreferrer">Join the community<span class="sr-only"> on WhatsApp (opens in a new tab)</span></a>
+        <span class="mono xs dim">Free to join · ${fmt(stats.users)} players on fs0cie1y</span></div>
+      <span class="crew-sticker" aria-hidden="true">free!</span>
+    </div>
+    <div class="crew-chat" aria-hidden="true">
+      <div class="bar"><i></i><i></i><i></i><span>fs0cie1y / #general</span></div>
+      <div class="msgs">
+        ${msg(0, '@pwn_player', 'anyone up for the crypto set tonight?', 'berry')}
+        ${msg(1, '@team_captain', 'need one more for a team of 4 🔐', 'yellow')}
+        <div class="msg sys" style="--i:2">› new competition announced · registration open</div>
+        <div class="msg me" style="--i:3"><div><b>you</b>count me in 🚩</div></div>
+        <div class="typing" style="--i:4"><i></i><i></i><i></i></div>
+      </div>
+      <div class="prompt">$ join --community<span class="caret"></span></div>
+    </div>
+  </div>`;
+}
 // Hand-drawn line that draws itself as the "how it works" section scrolls in.
 const SCROLL_LINE = '<svg class="scroll-line" viewBox="0 0 1200 260" preserveAspectRatio="none" aria-hidden="true" data-draw><path d="M-30 210 C 160 120, 330 60, 520 110 S 820 250, 960 170 S 1150 30, 1240 70"/></svg>';
 
@@ -136,9 +162,7 @@ rank 9 → 7</div><span class="cap">first blood</span></div>
     <div class="talk"><div class="blob" data-blob data-lens data-lens-size="190">${BLOB}</div>
       <div><span class="hand-title">let's play!${SCRIBBLE}</span><h2 class="big-h" data-letters style="margin-top:14px">Let's play</h2>
         <p>Pick a competition, bring a team or go solo, and watch your flags land on the board in real time.</p></div></div>
-    <div class="cta-wrap"><div class="comment-card" data-reveal><div class="lbl">Comment</div><div class="who"><img src="/img/logo.png" alt=""><div><b>fs0cie1y</b>Registration is free for players. Practice sets are open all year.</div></div><span class="react">⚡ ${fmt(meta.stats.users)}</span></div>
-    <a class="cta-card" href="${COMMUNITY_URL}" target="_blank" rel="noopener noreferrer" aria-label="Join the community on WhatsApp (opens in a new tab)"><span class="swirl"></span><span class="plate community" data-tilt="-7"><span class="dia">»</span><b>Join community</b><span class="dia">»</span></span></a></div>
-    <p class="mono xs dim" style="text-align:center;margin-top:16px">Chat with other players, find teammates and hear about new competitions first, in our WhatsApp group.</p></section>`;
+    ${crewCard(meta.stats)}</section>`;
 } });
 
 /* ---------- directory ---------- */
