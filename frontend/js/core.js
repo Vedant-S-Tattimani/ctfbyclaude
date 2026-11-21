@@ -126,14 +126,24 @@ function arenaSide(c) {
     <div class="grp label" role="heading" aria-level="2"><span>You</span></div>${sideLink('/dashboard', 'Dashboard', false)}${sideLink('/teams', 'Teams', false)}
     ${a?.team ? `<div class="foot"><div class="label">${esc(a.team.name || 'Solo')}</div><div class="row between" style="margin-top:8px"><span class="dim small">Rank</span><span class="mono">#${a.team.rank} / ${a.team.of}</span></div><div class="row between"><span class="dim small">Points</span><span class="mono">${a.team.points}</span></div><div class="row between"><span class="dim small">Solved</span><span class="mono">${a.team.solved}</span></div></div>` : ''}`;
 }
-function footer() { return `<footer class="footer"><span>fs0cie<b>1y</b> · capture the flag platform · <span data-clock></span></span><span class="row wrap" style="gap:10px 18px"><a href="#/verify">Verify certificate</a><a href="#/orgs">Organizations</a><a href="#/events">Competitions</a><a href="#/manage/new">Host an event</a></span></footer>${rulerHtml(true)}`; }
+/* ---------- studio credit (home page only): the team that built the site ---------- */
+const AEROTYNE_URL = 'https://startup-3z5.pages.dev/';
+const AEROTYNE_LEAF = '<svg viewBox="0 0 31 36" fill="none" aria-hidden="true"><path fill="#319F7E" d="M0 20c0 7.737 5.885 14.125 13.413 14.925V20.111l-5.32-5.321c-.603-.602-.674-1.582-.112-2.221a1.6 1.6 0 0 1 2.333-.078l3.1 3.1V5.074C5.883 5.875 0 12.263 0 20m11.035 3.347c.63.63.662 1.692.025 2.314a1.594 1.594 0 0 1-2.246-.015l-5.79-5.789c-.601-.602-.673-1.581-.11-2.221a1.6 1.6 0 0 1 2.332-.078zM16.61 5.075V15.59l3.06-3.06c.602-.602 1.582-.674 2.222-.112.7.616.727 1.684.077 2.333l-5.36 5.36v5.614l8.129-8.128c.602-.602 1.582-.673 2.221-.111.701.615.727 1.684.078 2.333L16.61 30.246v4.48c0 .106.093.19.199.177 7.433-.891 13.214-7.234 13.214-14.903 0-7.737-5.885-14.125-13.413-14.925"/></svg>';
+function madeBy() {
+  return `<div class="madeby-wrap"><a class="madeby" href="${AEROTYNE_URL}" target="_blank" rel="noopener" aria-label="Crafted by AeroTyne, web design studio (opens in a new tab)">
+    <span class="mb-stamp" aria-hidden="true"><svg class="ring" viewBox="0 0 100 100"><defs><path id="mb-circle" d="M50,50 m-38,0 a38,38 0 1,1 76,0 a38,38 0 1,1 -76,0"/></defs>
+      <text><textPath href="#mb-circle" textLength="236" lengthAdjust="spacing">AEROTYNE · WEB DESIGN STUDIO · </textPath></text></svg><span class="leaf">${AEROTYNE_LEAF}</span></span>
+    <span class="mb-text" aria-hidden="true"><span class="mb-hand">crafted with care by</span><span class="mb-word">AeroTyne<sup>®</sup></span>
+      <span class="mb-sub">we design &amp; build websites<i>visit the studio ↗</i></span></span></a></div>`;
+}
+function footer(c) { return `${c?.path === '/' ? madeBy() : ''}<footer class="footer"><span>fs0cie<b>1y</b> · capture the flag platform · <span data-clock></span></span><span class="row wrap" style="gap:10px 18px"><a href="#/verify">Verify certificate</a><a href="#/orgs">Organizations</a><a href="#/events">Competitions</a><a href="#/manage/new">Host an event</a></span></footer>${rulerHtml(true)}`; }
 function shellFor(c, html) {
   const sh = c.r.shell || 'public';
   if (sh === 'bare') return html;
   const r = rulerHtml();
   const d = dockHtml(c.path, state.me);
   if (sh === 'auth') return r + topbar(c) + html + d;
-  if (sh === 'public') return r + topbar(c) + `<main id="main">${html}</main>` + footer() + d;
+  if (sh === 'public') return r + topbar(c) + `<main id="main">${html}</main>` + footer(c) + d;
   const side = sh === 'arena' ? arenaSide(c) : appSide(c);
   return r + topbar(c, { menu: true }) + `<div class="app"><aside class="side" aria-label="Section navigation">${side}</aside><main class="main" id="main">${html}</main></div>` + d;
 }
