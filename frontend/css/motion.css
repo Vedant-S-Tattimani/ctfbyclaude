@@ -14,18 +14,6 @@
 .lens.round .box i { border-radius: 50%; }
 .lens.round .box i:nth-child(1) { left: 10%; top: 10%; } .lens.round .box i:nth-child(2) { right: 10%; top: 10%; }
 .lens.round .box i:nth-child(3) { left: 10%; bottom: 10%; } .lens.round .box i:nth-child(4) { right: 10%; bottom: 10%; }
-/* the YOU cursor shrinks to a dot while the lens is open, like a selection tool */
-body:has(.lens.on) .you-cursor svg { transform: scale(.6); }
-
-/* ---------- cursor tag takes a contrasting colour on coloured sections ---------- */
-.you-cursor .tagl { background: var(--cur-bg, var(--ink)); color: var(--cur-fg, #fff); }
-.you-cursor[data-on='k-cyan'] { --cur-bg: var(--berry); --cur-fg: #fff; }
-.you-cursor[data-on='k-yellow'] { --cur-bg: #2b4bd8; --cur-fg: #fff; }
-.you-cursor[data-on='k-berry'] { --cur-bg: var(--green); --cur-fg: #fff; }
-.you-cursor[data-on='k-green'] { --cur-bg: var(--ink); --cur-fg: #fff; }
-.you-cursor[data-on='k-ink'] { --cur-bg: #fff; --cur-fg: var(--ink); }
-.you-cursor[data-on] .tagl { transform: scale(1.06); }
-
 /* ---------- words / letters lit by scroll ---------- */
 [data-words] .w { color: rgba(17, 18, 18, .16); transition: color .35s var(--ease), opacity .35s var(--ease); }
 [data-words] svg.w, [data-words] .w svg { opacity: .2; transition: opacity .35s var(--ease), transform .45s var(--spring); }
@@ -73,20 +61,6 @@ body:has(.lens.on) .you-cursor svg { transform: scale(.6); }
 .cta-card .plate.community { max-width: calc(100% - 32px); }
 .cta-card .plate.community b { font-size: clamp(28px, 5vw, 72px); white-space: normal; text-align: center; line-height: .95; }
 
-/* ---------- googly eyes trailing the cursor (home page only, see initEyes in js/motion.js) ---------- */
-.eyes-cursor { position: fixed; left: 0; top: 0; z-index: 195; display: flex; gap: 1px; margin: -10px 0 0 -17px; pointer-events: none; will-change: transform; transition: opacity .25s var(--ease); }
-.eyes-cursor .eye { position: relative; display: grid; place-items: center; width: 17px; height: 20px; border-radius: 50%; background: #fff; border: 1.5px solid var(--ink);
-  box-shadow: 0 2px 4px rgba(0, 0, 0, .18); transform-origin: center; animation: eyesBlink 5.2s infinite; transition: scale .25s var(--spring); }
-.eyes-cursor .eye:nth-child(2) { animation-delay: .04s; }
-.eyes-cursor .eye i { width: 9px; height: 10px; border-radius: 50%; background: var(--ink); }
-.eyes-cursor.hide { opacity: 0; }
-/* On the home page the eyes are the cursor companion, so the YOU tag would be a second cursor. */
-body:has(.hero2) .you-cursor { display: none; }
-/* Home page cursor: a crosshair (hotspot at its centre), kept on links and buttons too; text fields keep the I-beam. */
-body:has(.hero2), body:has(.hero2) * { cursor: url('/img/crosshair.svg') 16 16, crosshair; }
-body:has(.hero2) input, body:has(.hero2) textarea { cursor: text; }
-.eyes-cursor.hide .eye { scale: .4; }
-@keyframes eyesBlink { 0%, 93%, 100% { transform: scaleY(1); } 96% { transform: scaleY(.08); } }
 
 /* ---------- gentle drift on hero stickers ---------- */
 .hero2 .sticker { animation: stickerDrift 9s var(--ease) infinite; }
@@ -100,7 +74,7 @@ body:has(.hero2) input, body:has(.hero2) textarea { cursor: text; }
   .comment-card { position: relative; left: auto; top: auto; margin: 0 auto 16px; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .lens, .eyes-cursor { display: none; }
+  .lens { display: none; }
   .blob .body, .blob .eye, .hero2 .sticker { animation: none; }
   [data-tilt] { rotate: 0deg; }
 }

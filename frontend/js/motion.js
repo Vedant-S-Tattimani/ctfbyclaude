@@ -135,57 +135,9 @@ function initBlobTracking() {
   }, { passive: true });
 }
 
-/* ---------- googly eyes that trail the cursor (home page only) ---------- */
-// A slow, loose spring makes the eyes chase the pointer, so the pointer is always out ahead of them and
-// the pupils swing to wherever it goes. Each eye aims on its own, so they converge when the pointer is close.
-const EYES_OFFSET_X = 26, EYES_OFFSET_Y = 14; // where they settle when the pointer stops: just below-right
-const EYES_STIFFNESS = 0.035, EYES_DAMPING = 0.84;
-const PUPIL_TRAVEL = 4.5; // px from the centre of the eye
-const PUPIL_EASE = 0.35;
-const EYE_CENTERS = [-8.5, 9.5]; // x of each eye's centre relative to the container anchor
-let eyesEl = null, eyesHome = false;
-function initEyes() {
-  if (reduce || !finePointer) return;
-  eyesEl = document.createElement('div');
-  eyesEl.className = 'eyes-cursor hide'; eyesEl.setAttribute('aria-hidden', 'true');
-  eyesEl.innerHTML = '<span class="eye"><i></i></span><span class="eye"><i></i></span>';
-  document.body.appendChild(eyesEl);
-  const pupils = [...eyesEl.querySelectorAll('i')].map((el, i) => ({ el, cx: EYE_CENTERS[i], x: 0, y: 0 }));
-  let mx = -500, my = -500, ex = -500, ey = -500, vx = 0, vy = 0, seen = false, blocked = false;
-  addEventListener('mousemove', (e) => {
-    mx = e.clientX; my = e.clientY;
-    if (!seen) { ex = mx + EYES_OFFSET_X; ey = my + EYES_OFFSET_Y; seen = true; }
-    // Never two pairs of eyes at once, and stay out of the way of typing.
-    blocked = !!e.target.closest?.('[data-blob], input, textarea, select');
-  }, { passive: true });
-  document.addEventListener('mouseleave', () => { seen = false; });
-  const loop = () => {
-    const show = eyesHome && seen && !blocked && !lens?.classList.contains('on');
-    eyesEl.classList.toggle('hide', !show);
-    if (show) {
-      vx = (vx + (mx + EYES_OFFSET_X - ex) * EYES_STIFFNESS) * EYES_DAMPING;
-      vy = (vy + (my + EYES_OFFSET_Y - ey) * EYES_STIFFNESS) * EYES_DAMPING;
-      ex += vx; ey += vy;
-      const tilt = Math.max(-12, Math.min(12, vx * 0.9));
-      eyesEl.style.transform = `translate3d(${ex}px, ${ey}px, 0) rotate(${tilt}deg)`;
-      for (const p of pupils) {
-        const dx = mx - (ex + p.cx), dy = my - ey, d = Math.hypot(dx, dy) || 1;
-        const reach = Math.min(1, d / 24); // ease toward the centre when the pointer is right on top
-        p.x += ((dx / d) * PUPIL_TRAVEL * reach - p.x) * PUPIL_EASE;
-        p.y += ((dy / d) * PUPIL_TRAVEL * reach - p.y) * PUPIL_EASE;
-        p.el.style.transform = `translate(${p.x}px, ${p.y}px)`;
-      }
-    }
-    requestAnimationFrame(loop);
-  };
-  loop();
-}
-
 export function motion(root = document) {
   collectScroll(root);
   blobs = [...document.querySelectorAll('[data-blob]')];
-  eyesHome = !!document.querySelector('.hero2'); // the home page is the only view with the hero
 }
 initLens();
 initBlobTracking();
-initEyes();

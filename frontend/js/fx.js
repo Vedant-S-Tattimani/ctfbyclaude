@@ -1,36 +1,19 @@
-// Motion & effects layer: multiplayer "YOU" cursor, ruler marker, scroll reveals,
+// Motion & effects layer: ruler marker, scroll reveals,
 // count-ups, live clocks, magnetic buttons, parallax stickers and confetti.
 // Everything degrades to static content with prefers-reduced-motion or touch input.
-import { CURSOR } from './ui.js';
 import { motion } from './motion.js';
 
 const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
 const finePointer = matchMedia('(pointer: fine)').matches;
 
-/* ---------- multiplayer cursor that follows the pointer ---------- */
-let cursorEl = null; let tx = -100, ty = -100, cx = -100, cy = -100;
-export function setCursorLabel(text) { const t = cursorEl?.querySelector('.tagl'); if (t) t.textContent = text; }
-function initCursor() {
+/* ---------- ruler marker: shows the pointer's x position on the top ruler ---------- */
+function initRulerMark() {
   if (reduce || !finePointer) return;
-  cursorEl = document.createElement('div'); cursorEl.className = 'you-cursor hide';
-  cursorEl.innerHTML = `${CURSOR('#111212')}<span class="tagl">YOU</span>`;
-  document.body.appendChild(cursorEl);
   addEventListener('mousemove', (e) => {
-    tx = e.clientX; ty = e.clientY; cursorEl.classList.remove('hide');
-    const t = e.target.closest?.('a,button,[data-act],input,select,textarea,label');
-    cursorEl.classList.toggle('on-link', !!t);
-    // On a coloured folder card the tag switches to a contrasting colour (see css/motion.css).
-    const card = e.target.closest?.('.fcard');
-    const k = card ? [...card.classList].find((c) => c.startsWith('k-')) || 'k-cyan' : '';
-    if (cursorEl.dataset.on !== k) { if (k) cursorEl.dataset.on = k; else delete cursorEl.dataset.on; }
-    const field = e.target.closest?.('input,textarea,select');
-    cursorEl.style.opacity = field ? '0' : '';
     const mark = document.getElementById('ruler-mark');
     if (mark) { mark.style.opacity = 1; mark.style.transform = `translateX(${e.clientX}px)`; mark.firstChild.textContent = Math.round(e.clientX); }
   }, { passive: true });
-  document.addEventListener('mouseleave', () => { cursorEl.classList.add('hide'); const m = document.getElementById('ruler-mark'); if (m) m.style.opacity = 0; });
-  const loop = () => { cx += (tx - cx) * 0.22; cy += (ty - cy) * 0.22; cursorEl.style.transform = `translate3d(${cx + 10}px, ${cy + 8}px, 0)`; requestAnimationFrame(loop); };
-  loop();
+  document.addEventListener('mouseleave', () => { const m = document.getElementById('ruler-mark'); if (m) m.style.opacity = 0; });
 }
 
 /* ---------- scroll reveal ---------- */
@@ -106,5 +89,5 @@ export function confetti(x = innerWidth / 2, y = innerHeight / 2) {
 export function enhance(root = document.getElementById('root')) {
   reveal(root); countUp(root); magnet(root); parallax(root); motion(root); tickClocks();
 }
-initCursor();
+initRulerMark();
 new MutationObserver(() => { clearTimeout(enhance.t); enhance.t = setTimeout(() => enhance(), 30); }).observe(document.getElementById('root'), { childList: true, subtree: true });

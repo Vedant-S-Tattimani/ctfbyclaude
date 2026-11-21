@@ -84,11 +84,6 @@ code, .prose code { font-family: var(--mono); font-size: .9em; background: var(-
 @keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(47, 188, 129, .45); } 70% { box-shadow: 0 0 0 7px rgba(47, 188, 129, 0); } 100% { box-shadow: 0 0 0 0 rgba(47, 188, 129, 0); } }
 .ruler.bottom { position: relative; border-top: 1px solid var(--rule); border-bottom: 0; }
 
-.you-cursor { position: fixed; left: 0; top: 0; z-index: 200; pointer-events: none; transform: translate3d(-100px, -100px, 0); will-change: transform; transition: opacity .25s; }
-.you-cursor svg { display: block; filter: drop-shadow(0 1px 1px rgba(0, 0, 0, .25)); }
-.you-cursor .tagl { position: absolute; left: 14px; top: 16px; font: 500 10.5px var(--mono); background: var(--ink); color: #fff; padding: 2px 7px; border-radius: 99px; white-space: nowrap; transition: background .2s, transform .25s var(--spring); }
-.you-cursor.on-link .tagl { background: var(--cyan); color: var(--ink); transform: scale(1.08); }
-.you-cursor.hide { opacity: 0; }
 .ghost-cursor { position: absolute; z-index: 3; pointer-events: none; animation: drift 9s ease-in-out infinite; }
 .ghost-cursor .tagl { position: absolute; left: 14px; top: 16px; font: 500 11px var(--mono); padding: 4px 10px; border-radius: 99px; color: #fff; white-space: nowrap; text-transform: uppercase; }
 @keyframes drift { 0%, 100% { transform: translate(0, 0); } 25% { transform: translate(22px, -14px); } 50% { transform: translate(-8px, 12px); } 75% { transform: translate(-20px, -6px); } }
@@ -584,11 +579,10 @@ table.t { width: 100%; border-collapse: collapse; font-size: 14px; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }
   .rv { opacity: 1; transform: none; filter: none; }
-  .you-cursor, .ghost-cursor { display: none; }
+  .ghost-cursor { display: none; }
 }
 /* touch: every control at least 40px, and 16px inputs so iOS does not zoom on focus */
 @media (pointer: coarse) {
-  .you-cursor { display: none; }
   .btn, .btn.sm { --bh: 40px; }
   .iconbtn, .chip-round { height: 40px; min-width: 40px; }
   .seg button, .seg a, .tabs a, .tabs button, .side a.nav { min-height: 40px; }
