@@ -5,6 +5,7 @@
 //  - [data-draw]     an SVG line that draws itself with scroll progress
 //  - [data-tilt]     an element that straightens from a tilt (deg) to flat as it scrolls in
 //  - [data-blob]     a mascot whose eyes follow the pointer and blink
+//  - home page       an animated crosshair replaces the pointer (see initCrosshair)
 // With prefers-reduced-motion everything renders in its finished state; touch devices get no lens or eye tracking.
 const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
 const finePointer = matchMedia('(pointer: fine)').matches;
@@ -135,9 +136,42 @@ function initBlobTracking() {
   }, { passive: true });
 }
 
+/* ---------- crosshair pointer (home page only) ---------- */
+// Drawn as an element that sits exactly on the pointer (no easing, so it never lags). The diamond turns slowly,
+// the corner brackets close in over anything clickable, and it pulses on click. Text fields keep the I-beam.
+// Reduced motion or touch: no element; css/motion.css falls back to the still img/crosshair.svg pointer.
+const XHAIR_TARGETS = 'a, button, [data-act], [data-href], label, select, summary, [role=button]';
+const XHAIR_TEXT = 'input, textarea, [contenteditable=""], [contenteditable=true]';
+let xhairEl = null;
+function initCrosshair() {
+  if (reduce || !finePointer) return;
+  xhairEl = document.createElement('div');
+  xhairEl.className = 'xhair hide'; xhairEl.setAttribute('aria-hidden', 'true');
+  xhairEl.innerHTML = `<svg viewBox="0 0 48 48" width="48" height="48" fill="none" stroke-linecap="square">
+    <g class="xh-lines"><path d="M24 2v16M24 30v16M2 24h16M30 24h16"/></g>
+    <g class="xh-brackets"><path d="M14 19v-5h5M29 14h5v5M14 29v5h5M34 29v5h-5"/></g>
+    <g class="xh-diamond"><path d="M24 18.5l5.5 5.5-5.5 5.5-5.5-5.5z"/><circle cx="24" cy="24" r="1.4"/></g></svg>`;
+  document.body.appendChild(xhairEl);
+  addEventListener('mousemove', (e) => {
+    if (!document.documentElement.classList.contains('xhair-home')) return;
+    xhairEl.style.transform = `translate3d(${e.clientX}px, ${e.clientY}px, 0)`;
+    const overText = !!e.target.closest?.(XHAIR_TEXT);
+    xhairEl.classList.toggle('hide', overText);
+    xhairEl.classList.toggle('target', !overText && !!e.target.closest?.(XHAIR_TARGETS));
+  }, { passive: true });
+  document.addEventListener('mouseleave', () => xhairEl.classList.add('hide'));
+  addEventListener('mousedown', () => { xhairEl.classList.remove('press'); void xhairEl.offsetWidth; xhairEl.classList.add('press'); });
+  xhairEl.addEventListener('animationend', (e) => { if (e.animationName === 'xhairPress') xhairEl.classList.remove('press'); });
+}
+
 export function motion(root = document) {
   collectScroll(root);
   blobs = [...document.querySelectorAll('[data-blob]')];
+  // The home page is the only view with the hero; the crosshair (and hidden system pointer) apply there only.
+  const home = !!document.querySelector('.hero2');
+  document.documentElement.classList.toggle('xhair-home', home && !!xhairEl);
+  if (!home) xhairEl?.classList.add('hide');
 }
 initLens();
 initBlobTracking();
+initCrosshair();

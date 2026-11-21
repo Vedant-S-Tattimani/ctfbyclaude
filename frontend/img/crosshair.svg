@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 48 48" fill="none" stroke-linecap="square">
+  <!-- Still version of the home-page crosshair, used as the pointer when animations are off. Hotspot: 24 24. -->
+  <g stroke="#fff" stroke-width="3.5" opacity=".9">
+    <path d="M24 2v16M24 30v16M2 24h16M30 24h16M14 19v-5h5M29 14h5v5M14 29v5h5M34 29v5h-5"/>
+    <path d="M24 18.5l5.5 5.5-5.5 5.5-5.5-5.5z"/>
+  </g>
+  <g stroke="#111212" stroke-width="1.5">
+    <path d="M24 2v16M24 30v16M2 24h16M30 24h16M14 19v-5h5M29 14h5v5M14 29v5h5M34 29v5h-5"/>
+    <path d="M24 18.5l5.5 5.5-5.5 5.5-5.5-5.5z"/>
+  </g>
+  <circle cx="24" cy="24" r="1.4" fill="#111212"/>
+</svg>

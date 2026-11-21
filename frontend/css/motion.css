@@ -62,6 +62,30 @@
 .cta-card .plate.community b { font-size: clamp(28px, 5vw, 72px); white-space: normal; text-align: center; line-height: .95; }
 
 
+/* ---------- crosshair pointer on the home page (see initCrosshair in js/motion.js) ---------- */
+.xhair { position: fixed; left: 0; top: 0; z-index: 210; width: 48px; height: 48px; margin: -24px 0 0 -24px; pointer-events: none;
+  filter: drop-shadow(0 0 1.2px #fff) drop-shadow(0 0 1.2px #fff); transition: opacity .15s var(--ease); }
+.xhair.hide { opacity: 0; }
+.xhair svg { display: block; overflow: visible; }
+.xhair path { stroke: var(--ink); stroke-width: 1.5; }
+.xhair circle { fill: var(--ink); }
+.xhair g { transform-box: view-box; transform-origin: 24px 24px; transition: transform .22s var(--spring), opacity .2s var(--ease); }
+.xhair .xh-diamond { animation: xhairSpin 6s linear infinite; }
+.xhair.target .xh-brackets { transform: scale(.72); }
+.xhair.target .xh-lines { transform: scale(.82); }
+.xhair.target .xh-diamond path { fill: var(--cyan); }
+.xhair.press .xh-brackets { animation: xhairPress .32s var(--spring); }
+@keyframes xhairSpin { to { transform: rotate(360deg); } }
+@keyframes xhairPress { 0% { transform: scale(1); } 40% { transform: scale(.55); } 100% { transform: scale(1); } }
+/* Hide the system pointer only while the crosshair is running; text fields keep their I-beam. */
+html.xhair-home, html.xhair-home * { cursor: none !important; }
+html.xhair-home input, html.xhair-home textarea, html.xhair-home [contenteditable] { cursor: text !important; }
+/* Animations off or touch: no moving element, the still crosshair image is the pointer instead. */
+@media (prefers-reduced-motion: reduce) and (pointer: fine) {
+  body:has(.hero2), body:has(.hero2) * { cursor: url('/img/crosshair.svg') 24 24, crosshair; }
+  body:has(.hero2) input, body:has(.hero2) textarea { cursor: text; }
+}
+
 /* ---------- gentle drift on hero stickers ---------- */
 .hero2 .sticker { animation: stickerDrift 9s var(--ease) infinite; }
 .hero2 .sticker.s2 { animation-delay: -4.5s; animation-duration: 11s; }
@@ -74,7 +98,7 @@
   .comment-card { position: relative; left: auto; top: auto; margin: 0 auto 16px; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .lens { display: none; }
+  .lens, .xhair { display: none; }
   .blob .body, .blob .eye, .hero2 .sticker { animation: none; }
   [data-tilt] { rotate: 0deg; }
 }
