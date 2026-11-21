@@ -235,6 +235,28 @@ export async function pushAuditToFirebase(entry) {
   }
 }
 
+/**
+ * Removes the Firebase copies of deleted audit entries. Matches on id, or (for copies made before ids were synced)
+ * on time + action + actor. `all` clears the whole mirrored log.
+ */
+export async function removeAuditFromFirebase(entries, { all = false } = {}) {
+  if (!db) return;
+  try {
+    if (all) { await ref('audit_log').remove(); return; }
+    const ids = new Set(entries.map((e) => e.id));
+    const keys = new Set(entries.map((e) => `${e.created_at}|${e.action}|${e.actor_id ?? null}`));
+    const snap = await ref('audit_log').once('value');
+    const removals = [];
+    snap.forEach((child) => {
+      const v = child.val() || {};
+      if (ids.has(v.id) || keys.has(`${v.created_at}|${v.action}|${v.actor_id ?? null}`)) removals.push(child.ref.remove());
+    });
+    await Promise.all(removals);
+  } catch (err) {
+    console.error('[firebase] Failed to remove audit entries:', err.message);
+  }
+}
+
 // ─── Bulk sync (for initial migration or recovery) ────────────────────────────
 
 /**

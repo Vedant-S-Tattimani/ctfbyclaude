@@ -4,7 +4,7 @@ import { col, findOne, find, count, insert, update, byIds, escapeRegex, now, aud
 import { bad, forbidden, notFound, str, oneOf, requireAuth, requireRole, slugify, publicUser } from '../lib.js';
 import { setAccountDisabled } from '../identity.js';
 import { orgRole, phase, scoreboard, pushNotify } from '../core.js';
-import { syncUserToFirebase, removeUserFromFirebase, syncOrgMemberToFirebase, removeOrgMemberFromFirebase, pushAuditToFirebase } from '../firebase.js';
+import { syncUserToFirebase, removeUserFromFirebase, syncOrgMemberToFirebase, removeOrgMemberFromFirebase, pushAuditToFirebase, removeAuditFromFirebase } from '../firebase.js';
 
 const r = Router();
 const orgBySlug = async (s) => { const o = await findOne('orgs', { slug: String(s) }); if (!o) throw notFound('Organization not found.'); return o; };
@@ -225,15 +225,39 @@ r.patch('/admin/events/:slug', async (req, res) => {
   for (const s of await find('event_staff', { event_id: e.id })) await pushNotify(s.user_id, 'platform', `${e.name} was ${verb} by platform staff`, reason || '', `#/manage/${e.slug}`);
   await audit(req.user.id, requested === 'restore' ? 'event.restored' : `event.${status}`, `event:${e.slug}`, { reason, status }, { eventId: e.id }); res.json({ ok: true, status });
 });
+/** Audit log filter: matches the action, the target or the actor's username. Empty text matches everything. */
+async function auditQuery(text) {
+  const q = String(text || '').trim().slice(0, 100);
+  if (!q) return {};
+  const re = { $regex: escapeRegex(q), $options: 'i' };
+  const actors = await find('users', { username: re }, { projection: { id: 1 } });
+  return { $or: [{ action: re }, { target: re }, { actor_id: { $in: actors.map((u) => u.id) } }] };
+}
 r.get('/admin/audit', async (req, res) => {
-  const q = String(req.query.q || '');
-  let query = {};
-  if (q) {
-    const re = { $regex: escapeRegex(q), $options: 'i' };
-    const actors = await find('users', { username: re }, { projection: { id: 1 } });
-    query = { $or: [{ action: re }, { target: re }, { actor_id: { $in: actors.map((u) => u.id) } }] };
-  }
-  res.json({ entries: await auditOut(await find('audit_log', query, { sort: { id: -1 }, limit: 300 })) });
+  const query = await auditQuery(req.query.q);
+  const [entries, total] = await Promise.all([find('audit_log', query, { sort: { id: -1 }, limit: 300 }), count('audit_log', query)]);
+  res.json({ entries: await auditOut(entries), total });
+});
+// Deleting entries frees database space. One "audit.cleared" entry records who deleted how many, so the log never
+// silently loses history.
+r.delete('/admin/audit/:id', async (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id)) throw bad('Unknown audit entry.');
+  const entry = await findOne('audit_log', { id });
+  if (!entry) throw notFound('That audit entry no longer exists.');
+  await col('audit_log').deleteOne({ id });
+  await removeAuditFromFirebase([entry]);
+  res.json({ ok: true, deleted: 1 });
+});
+r.delete('/admin/audit', async (req, res) => {
+  if (req.body?.confirm !== 'DELETE') throw bad('Type DELETE to confirm.', { field: 'confirm' });
+  const filter = String(req.body?.q || '').trim();
+  const query = await auditQuery(filter);
+  const entries = filter ? await find('audit_log', query, { projection: { id: 1, created_at: 1, action: 1, actor_id: 1 } }) : [];
+  const { deletedCount } = await col('audit_log').deleteMany(query);
+  await removeAuditFromFirebase(entries, { all: !filter });
+  await audit(req.user.id, 'audit.cleared', filter ? `filter:${filter}` : 'all', { deleted: deletedCount });
+  res.json({ ok: true, deleted: deletedCount });
 });
 r.get('/admin/incidents', async (_req, res) => {
   const list = await find('incidents', {}, { projection: { id: 1, kind: 1, severity: 1, title: 1, status: 1, created_at: 1, event_id: 1 }, sort: { id: -1 }, limit: 100 });

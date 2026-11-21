@@ -33,9 +33,9 @@ route('/admin', { ...AD, title: 'Platform', view: async () => {
     <div class="cells c5" style="margin-bottom:20px">${[['Users', s.users, `${s.unverified} unverified · ${s.suspended} suspended`], ['Organizations', s.orgs, `${s.unverifiedOrgs} awaiting verification`, s.unverifiedOrgs], ['Events', s.events, `${s.live} live now`], ['Open integrity signals', s.openIncidents, 'across all events', s.openIncidents], ['2FA adoption', `${s.twoFactor}%`, `${s.runningInstances} instances running`]].map(([k, v, h, flag]) => `<div class="cell metric ${flag ? 'stripe-medium' : ''}"><div class="label">${k}</div><div class="v">${typeof v === 'number' ? fmt(v) : v}</div><div class="d">${h}</div></div>`).join('')}</div>
     <div class="cells c2" style="margin-bottom:20px"><div><div class="cell-h"><h3>Sign-ups per day</h3><span class="xs faint">30 days</span></div><div class="cell">${areaChart(d.series.map((x) => x.signups), d.series.map((x) => new Date(x.day).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })), { h: 140 })}</div></div>
       <div><div class="cell-h"><h3>Flag submissions per day</h3><span class="xs faint">30 days</span></div><div class="cell">${areaChart(d.series.map((x) => x.submissions), d.series.map((x) => new Date(x.day).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })), { h: 140 })}</div></div></div>
-    <div class="panel"><div class="cell-h"><h3>Recent audit entries</h3><a class="small sig" href="#/admin/audit">Full log</a></div><div class="tablewrap"><table class="t"><tbody>${d.recentAudit.map(auditRow).join('')}</tbody></table></div></div></div>`;
+    <div class="panel"><div class="cell-h"><h3>Recent audit entries</h3><a class="small sig" href="#/admin/audit">Full log</a></div><div class="tablewrap"><table class="t"><tbody>${d.recentAudit.map((a) => auditRow(a)).join('')}</tbody></table></div></div></div>`;
 } });
-const auditRow = (a) => `<tr><td class="mono xs nowrap">${dtFmt(a.created_at)}</td><td class="mono small">${a.username ? '@' + esc(a.username) : '<span class="faint">system</span>'}</td><td>${tag(esc(a.action))}</td><td class="small">${esc(a.target || '')}</td><td class="mono xs faint trunc" style="max-width:280px">${esc(a.meta && a.meta !== '{}' ? a.meta : '')}</td><td class="mono xs faint">${esc(a.ip || '')}</td></tr>`;
+const auditRow = (a, del = false) => `<tr><td class="mono xs nowrap">${dtFmt(a.created_at)}</td><td class="mono small">${a.username ? '@' + esc(a.username) : '<span class="faint">system</span>'}</td><td>${tag(esc(a.action))}</td><td class="small">${esc(a.target || '')}</td><td class="mono xs faint trunc" style="max-width:280px">${esc(a.meta && a.meta !== '{}' ? a.meta : '')}</td><td class="mono xs faint">${esc(a.ip || '')}</td>${del ? `<td class="r"><button class="btn ghost sm" data-act="auditdel" data-id="${a.id}" aria-label="Delete this entry" title="Delete this entry">${icon('trash')}</button></td>` : ''}</tr>`;
 const UF = { q: '', status: 'all' };
 route('/admin/users', { ...AD, title: 'Users', view: async () => {
   const { users } = await api(`/admin/users?q=${encodeURIComponent(UF.q)}&status=${UF.status}`);
@@ -68,8 +68,21 @@ onAct('evdel', async (el) => { if (await deleteEventFlow(el.dataset.slug, el.dat
 onAct('evres', async (el) => { const r = await api(`/admin/events/${el.dataset.slug}`, { method: 'PATCH', body: { status: 'restore' } }); toast(r.status === 'published' ? 'Event restored and published again.' : 'Event restored as a draft.'); refresh(); });
 let AQ = '';
 route('/admin/audit', { ...AD, title: 'Audit log', view: async () => {
-  const { entries } = await api(`/admin/audit?q=${encodeURIComponent(AQ)}`);
-  return `<div class="page"><div class="pagehead"><div><h1>Audit log</h1><p>Administrative, organizer and security actions, newest first.</p></div><form class="row" data-form="aq"><input class="input" name="q" value="${esc(AQ)}" placeholder="Action, target or user" aria-label="Filter"><button class="btn" type="submit">Filter</button></form></div>
-    <div class="panel tablewrap"><table class="t"><thead><tr><th>Time</th><th>Actor</th><th>Action</th><th>Target</th><th>Details</th><th>IP</th></tr></thead><tbody>${entries.map(auditRow).join('') || '<tr><td colspan="6"><div class="empty">Nothing matches.</div></td></tr>'}</tbody></table></div></div>`;
+  const { entries, total } = await api(`/admin/audit?q=${encodeURIComponent(AQ)}`);
+  return `<div class="page"><div class="pagehead"><div><h1>Audit log</h1><p>Administrative, organizer and security actions, newest first.</p></div><form class="row" data-form="aq"><input class="input" name="q" value="${esc(AQ)}" placeholder="Action, target or user" aria-label="Filter"><button class="btn" type="submit">Filter</button>${total ? `<button class="btn danger" type="button" data-act="auditclear" data-total="${total}">${icon('trash')}${AQ ? `Delete ${fmt(total)} matching` : 'Delete all'}</button>` : ''}</form></div>
+    <div class="panel tablewrap"><table class="t"><thead><tr><th>Time</th><th>Actor</th><th>Action</th><th>Target</th><th>Details</th><th>IP</th><th></th></tr></thead><tbody>${entries.map((a) => auditRow(a, true)).join('') || '<tr><td colspan="7"><div class="empty">Nothing matches.</div></td></tr>'}</tbody></table></div></div>`;
 } });
 onForm('aq', (f) => { AQ = f.q; refresh(); });
+onAct('auditdel', async (el) => {
+  if (!(await confirmDlg('Delete this audit entry?', 'It is removed from the database for good.', 'Delete', true))) return;
+  await api(`/admin/audit/${el.dataset.id}`, { method: 'DELETE' }); toast('Audit entry deleted.'); refresh();
+});
+onAct('auditclear', async (el) => {
+  const n = Number(el.dataset.total); const what = AQ ? `${fmt(n)} entr${n === 1 ? 'y' : 'ies'} matching "${esc(AQ)}"` : `all ${fmt(n)} audit entr${n === 1 ? 'y' : 'ies'}`;
+  const r = await dialog({ title: 'Delete audit entries?', body: `<p class="dim">This permanently deletes ${what} from the database. One new entry records that you cleared the log. This cannot be undone.</p>
+    <div class="field"><label for="ac">Type <b class="mono">DELETE</b> to confirm</label><input id="ac" class="input mono" name="confirm" autocomplete="off" required></div><div class="form-error"></div>`,
+  actions: [{ label: 'Cancel', kind: 'ghost', value: null }, { label: 'Delete forever', kind: 'danger', value: 'go', submit: true, validate: (f) => { if (f.confirm.value.trim().toUpperCase() === 'DELETE') return true; f.querySelector('.form-error').innerHTML = `<div class="notice err">${icon('alert')}<div>Type DELETE to confirm.</div></div>`; return false; } }] });
+  if (r.value !== 'go') return;
+  const out = await api('/admin/audit', { method: 'DELETE', body: { confirm: 'DELETE', q: AQ } });
+  toast(`${fmt(out.deleted)} audit entr${out.deleted === 1 ? 'y' : 'ies'} deleted.`); refresh();
+});

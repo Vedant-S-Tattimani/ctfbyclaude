@@ -69,6 +69,23 @@ test('an admin can create, edit, publish and then delete an event with everythin
   assert.equal(await count('hints', { challenge_id: ch.data.challenge.id }), 0);
   assert.equal((await admin(`/manage/events/${slug}`)).status, 404);
 });
+test('platform admins can delete audit entries one at a time, by filter, or all at once', async () => {
+  const admin = await login('admin'); const player = await login('ana');
+  assert.equal((await player('/admin/audit', { method: 'DELETE', body: { confirm: 'DELETE' } })).status, 403, 'players cannot clear the log');
+  let log = (await admin('/admin/audit')).data; assert.ok(log.total > 0);
+  const one = log.entries[0];
+  assert.equal((await admin(`/admin/audit/${one.id}`, { method: 'DELETE' })).status, 200);
+  assert.equal(await count('audit_log', { id: one.id }), 0);
+  assert.equal((await admin(`/admin/audit/${one.id}`, { method: 'DELETE' })).status, 404);
+  assert.equal((await admin('/admin/audit', { method: 'DELETE', body: {} })).status, 400, 'needs the typed confirmation');
+  const logins = await count('audit_log', { action: 'user.login' }); assert.ok(logins > 0);
+  const byFilter = await admin('/admin/audit', { method: 'DELETE', body: { confirm: 'DELETE', q: 'user.login' } });
+  assert.equal(byFilter.data.deleted, logins); assert.equal(await count('audit_log', { action: 'user.login' }), 0);
+  const all = await admin('/admin/audit', { method: 'DELETE', body: { confirm: 'DELETE' } });
+  assert.equal(all.status, 200); assert.ok(all.data.deleted > 0);
+  log = (await admin('/admin/audit')).data;
+  assert.deepEqual(log.entries.map((e) => e.action), ['audit.cleared'], 'only the record of the clear-out remains');
+});
 test('CSRF header is required for mutations', async () => {
   const r = await fetch(`${base}/auth/firebase`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
   assert.equal(r.status, 403);

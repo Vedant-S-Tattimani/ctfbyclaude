@@ -115,8 +115,8 @@ export const escapeRegex = (s) => String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&
 
 export async function audit(actorId, action, target, meta = {}, extra = {}) {
   const entry = { actor_id: actorId ?? null, action, target: target ?? null, meta, event_id: extra.eventId ?? null, org_id: extra.orgId ?? null, ip: extra.ip ?? null, created_at: now() };
-  await insert('audit_log', entry);
-  pushAuditToFirebase(entry).catch(() => {});
+  const id = await insert('audit_log', entry);
+  pushAuditToFirebase({ id, ...entry }).catch(() => {});
 }
 export function notify(userId, kind, title, body = '', link = '') {
   return insert('notifications', { user_id: userId, kind, title, body, link, read: 0, created_at: now() });
