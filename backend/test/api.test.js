@@ -47,6 +47,28 @@ test('forgot password emails existing accounts only, and answers the same either
   for (let i = 0; i < 3; i++) await c('/auth/forgot', { method: 'POST', body: { email: 'reset.me@x.test' } });
   assert.equal(fake.resetEmails.length, 3, 'at most 3 reset emails per address per hour');
 });
+test('an admin can create, edit, publish and then delete an event with everything in it', async () => {
+  const admin = await login('admin'); const D = 86400000, n = Date.now();
+  const created = await admin('/manage/events', { method: 'POST', body: { name: 'Delete Me Cup', reg_opens_at: n, reg_closes_at: n + D, starts_at: n + 2 * D, ends_at: n + 3 * D, description: 'x', rules: 'r' } });
+  assert.equal(created.status, 200, JSON.stringify(created.data)); const slug = created.data.slug;
+  assert.equal((await admin(`/manage/events/${slug}`, { method: 'PATCH', body: { tagline: 'edited' } })).status, 200);
+  const ch = await admin(`/manage/events/${slug}/challenges`, { method: 'POST', body: { name: 'warmup', state: 'visible', flag: 'CIPHERARENA{ok}' } });
+  assert.equal(ch.status, 200, JSON.stringify(ch.data));
+  await admin(`/manage/events/${slug}/challenges/${ch.data.challenge.id}/hints`, { method: 'PUT', body: { hints: [{ content: 'look closer', cost: 10 }] } });
+  assert.equal((await admin(`/manage/events/${slug}/publish`, { method: 'POST' })).status, 200);
+  assert.equal((await admin(`/events/${slug}`)).data.staffRole, 'admin', 'the public page offers Manage to platform admins');
+  const eventId = (await findOne('events', { slug })).id;
+
+  const organizer = await login('mira_o');
+  assert.equal((await organizer(`/manage/events/${slug}`, { method: 'DELETE', body: { confirm: slug } })).status, 403, 'only the owner or a platform admin can delete');
+  assert.equal((await admin(`/manage/events/${slug}`, { method: 'DELETE', body: { confirm: 'wrong' } })).status, 400, 'the slug must be typed to confirm');
+  const del = await admin(`/manage/events/${slug}`, { method: 'DELETE', body: { confirm: slug } });
+  assert.equal(del.status, 200, JSON.stringify(del.data)); assert.equal(del.data.removed.challenges, 1);
+  assert.equal(await findOne('events', { slug }), null);
+  for (const name of ['challenges', 'event_staff', 'submissions', 'registrations']) assert.equal(await count(name, { event_id: eventId }), 0, name);
+  assert.equal(await count('hints', { challenge_id: ch.data.challenge.id }), 0);
+  assert.equal((await admin(`/manage/events/${slug}`)).status, 404);
+});
 test('CSRF header is required for mutations', async () => {
   const r = await fetch(`${base}/auth/firebase`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
   assert.equal(r.status, 403);

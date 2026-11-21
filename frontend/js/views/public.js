@@ -1,5 +1,5 @@
 // Public pages: home, directory, event page + registration, practice, leaderboard, orgs, profiles, certificate verification.
-import { api, route, state, go, refresh, onAct, onForm, onChange } from '../core.js';
+import { api, route, state, go, refresh, ctx, onAct, onForm, onChange } from '../core.js';
 import { esc, fmt, icon, tag, phaseTag, dateFmt, dtFmt, ago, dur, md, av, avColor, catCode, catName, diff, dialog, toast, hbars, CAT, STAR, UNDERLINE, SHAPE, SCRIBBLE, CURSOR } from '../ui.js';
 
 const DIFFW = { beginner: 'Beginner-friendly', intermediate: 'Intermediate', advanced: 'Advanced' };
@@ -167,13 +167,13 @@ route('/events/:slug', { view: async ({ params }) => {
   const d = await api(`/events/${params.slug}`); EV = d; const e = d.event; const me = state.me;
   const reg = e.myRegistration;
   let cta;
-  if (d.staffRole && d.staffRole !== 'admin') cta = `<a class="btn primary lg" href="#/manage/${esc(e.slug)}">Manage event</a>`;
+  if (d.staffRole) cta = `<a class="btn primary lg" href="#/manage/${esc(e.slug)}">Manage event</a>`; // includes platform admins
   else if (reg?.status === 'approved' && e.phase !== 'upcoming') cta = `<a class="btn primary lg" href="#/arena/${esc(e.slug)}">${e.phase === 'ended' ? 'Review challenges' : 'Enter the arena'}</a>`;
   else if (reg?.status === 'approved') cta = `<button class="btn lg" disabled>${icon('check')}Registered</button><button class="btn ghost sm" data-act="withdraw">Withdraw</button>`;
   else if (reg?.status === 'pending') cta = `<button class="btn lg" disabled>${icon('clock')}Waiting for approval</button>`;
   else if (reg) cta = `<button class="btn lg" disabled>Registration ${esc(reg.status)}</button>`;
   else if (!e.regOpen) cta = `<button class="btn lg" disabled>Registration closed</button>`;
-  else if (!me) cta = `<a class="btn primary lg" href="#/login">Sign in to register</a>`;
+  else if (!me) cta = `<button class="btn primary lg" data-act="signin-register">Sign in to register</button><span class="xs dim">New here? You can create an account on the next page.</span>`;
   else cta = `<button class="btn primary lg" data-act="register">${e.regMode === 'invite' ? 'Enter invite code' : e.regMode === 'approval' ? 'Apply to compete' : 'Register'}</button>`;
   const facts = [['Format', `Jeopardy · ${e.participation === 'team' ? `teams of ${e.teamMin}–${e.teamMax}` : 'individual'}`], ['Runs', e.isPractice ? 'Always open' : `${dtFmt(e.startsAt)} → ${dtFmt(e.endsAt)}`], ['Registration', `${{ open: 'Open', approval: 'Organizer approval', invite: 'Invitation code' }[e.regMode]}${e.regClosesAt ? ` · closes ${dtFmt(e.regClosesAt)}` : ''}`],
     ['Scoring', `${e.scoring === 'dynamic' ? 'Dynamic (points drop as teams solve)' : 'Static'}${e.firstBloodPct ? ` · first blood +${e.firstBloodPct}%` : ''}`], ['Location', e.mode === 'onsite' ? `On-site${e.venue ? ` — ${esc(e.venue)}` : ''}` : 'Online'], ['Level', DIFFW[e.difficulty]], ['Fee', e.priceNote || 'Free']];
@@ -191,12 +191,14 @@ route('/events/:slug', { view: async ({ params }) => {
         <div class="cell-h" style="border-top:1px solid var(--rule)"><h3>Announcements</h3></div><div class="cell stack">${d.announcements.length ? d.announcements.slice(0, 4).map((a) => `<div>${a.pinned ? tag('Pinned', 'warn') + ' ' : ''}<b class="small">${esc(a.title)}</b><div class="xs faint mono">${dtFmt(a.created_at)}</div><div class="small dim" style="margin-top:4px">${esc(a.body)}</div></div>`).join('') : '<span class="dim small">None yet.</span>'}</div>
         ${e.phase !== 'upcoming' ? `<div class="cell"><a class="btn" href="#/arena/${esc(e.slug)}/scoreboard" style="width:100%">Open scoreboard</a></div>` : ''}</div></div></div>` };
 } });
+// A shared event link brings people here signed out: send them back to this page after signing in.
+onAct('signin-register', () => { try { sessionStorage.setItem('ca_after', location.hash.slice(1)); } catch { /* storage blocked */ } go('/login'); });
 onAct('register', async () => {
   const e = EV.event; const me = state.me;
   if (!me.emailVerified) { toast('Verify your email address first. Use the link from your inbox, or resend it from Settings.', 'err'); return go('/settings'); }
   const teams = EV.myTeams.filter((t) => ['owner', 'captain'].includes(t.role));
   let body = '';
-  if (e.regMode === 'invite') body += `<div class="field"><label for="ic">Invitation code</label><input id="ic" class="input mono" name="inviteCode" required autocomplete="off"><span class="hint">Issued by ${esc(e.org?.name || 'the organizers')}.</span></div>`;
+  if (e.regMode === 'invite') body += `<div class="field"><label for="ic">Invitation code</label><input id="ic" class="input mono" name="inviteCode" required autocomplete="off" value="${esc(ctx.query.code || '')}"><span class="hint">Issued by ${esc(e.org?.name || 'the organizers')}.</span></div>`;
   if (e.participation === 'team') {
     body += teams.length ? `<fieldset class="field"><legend class="flabel" style="margin-bottom:6px">Compete as</legend><div class="choice">${teams.map((t, i) => `<label><input type="radio" name="teamId" value="${t.id}" ${i === 0 ? 'checked' : ''}><div><b>${esc(t.name)}</b><span>${t.size} member${t.size === 1 ? '' : 's'} · needs ${e.teamMin}–${e.teamMax}${t.size < e.teamMin || t.size > e.teamMax ? ' — size not allowed' : ''}</span></div></label>`).join('')}</div></fieldset>`
       : `<div class="notice warn">${icon('alert')}<div>You need a team you own or captain. <a class="link" href="#/teams">Create a team</a> first, then come back.</div></div>`;

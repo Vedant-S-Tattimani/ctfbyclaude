@@ -229,7 +229,10 @@ a:hover > .av, .row:hover > .av { transform: rotate(-8deg); }
 /* ---------- shells ---------- */
 .app { display: grid; grid-template-columns: 232px minmax(0, 1fr); min-height: calc(100vh - var(--ruler) - var(--nav)); }
 .side { position: sticky; top: calc(var(--ruler) + var(--nav)); height: calc(100vh - var(--ruler) - var(--nav)); height: calc(100dvh - var(--ruler) - var(--nav)); overflow-y: auto; background: rgba(255, 255, 255, .94); border-right: 1px solid var(--rule); display: flex; flex-direction: column; padding-bottom: 12px; }
-.side .grp { padding: 18px 16px 6px; }
+/* Section headings in the sidebar: not links, so they read as labels with a marker highlight and a divider. */
+.side .grp { padding: 20px 16px 8px; margin-top: 8px; border-top: 1px dashed var(--rule-2); cursor: default; user-select: none; }
+.side .grp:first-child { margin-top: 0; border-top: 0; }
+.side .grp > span { color: var(--ink); font-weight: 600; letter-spacing: .1em; padding: 1px 5px; background: linear-gradient(transparent 45%, var(--cream) 45%, var(--cream) 92%, transparent 92%); }
 .side a.nav { position: relative; display: flex; align-items: center; gap: 10px; margin: 1px 8px; padding: 8px 10px; font: 500 11px var(--mono); text-transform: uppercase; color: var(--dim); border-radius: 2px; overflow: hidden; z-index: 0; transition: color .2s; }
 .side a.nav::before { content: ''; position: absolute; inset: 0; background: var(--cyan); transform: scaleX(0); transform-origin: left; transition: transform .3s var(--ease); z-index: -1; }
 .side a.nav:hover { color: var(--ink); background: var(--raise); }

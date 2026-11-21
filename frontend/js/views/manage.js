@@ -10,6 +10,8 @@ async function ctxEvent(slug) {
   return d;
 }
 const head = (d, title, sub = '', actions = '') => `<div class="pagehead"><div><div class="crumbs"><a href="#/manage">MY EVENTS</a>/<a href="#/manage/${esc(d.event.slug)}">${esc(d.event.name.toUpperCase())}</a></div><h1>${title}</h1>${sub ? `<p>${sub}</p>` : ''}</div><div class="row wrap">${actions}</div></div>`;
+/** The link players open to see the event and register (invite-only events carry the code, prefilled on the page). */
+export const shareLink = (e) => `${location.origin}/#/events/${encodeURIComponent(e.slug)}${e.reg_mode === 'invite' && e.invite_code ? `?code=${encodeURIComponent(e.invite_code)}` : ''}`;
 const statusTag = (e) => (e.status === 'published' ? phaseTag(e.phase, e.is_practice) : e.status === 'draft' ? tag('Draft', 'warn') : tag('Suspended', 'crit'));
 
 /* ---------- list ---------- */
@@ -94,21 +96,31 @@ onForm('wizard', async (_f, fm) => {
 /* ---------- overview ---------- */
 route('/manage/:slug', { ...M, view: async ({ params }) => {
   const d = await ctxEvent(params.slug); const e = d.event; const s = d.stats; const can = ['owner', 'organizer', 'admin'].includes(d.role);
+  const blockers = d.checklist.filter((c) => !c.ok && c.label !== 'Rules written');
   const tl = d.timeline; const mx = Math.max(1, ...tl.map((b) => b.all));
   const bars = tl.length ? `<div class="legend"><span><i style="background:var(--rule-2);height:8px"></i>All submissions</span><span><i style="background:var(--signal-2);height:8px"></i>Correct</span></div>
     <div style="display:flex;align-items:flex-end;gap:3px;height:150px;border-bottom:1px solid var(--rule)">${tl.map((b) => `<div style="flex:1;display:flex;flex-direction:column;justify-content:flex-end;height:100%;position:relative" data-tip="${dtFmt(b.t)} · ${b.all} submitted, ${b.correct} correct"><div style="height:${(b.all / mx) * 100}%;background:var(--rule-2);position:relative"><div style="position:absolute;bottom:0;left:0;right:0;height:${b.all ? (b.correct / b.all) * 100 : 0}%;background:var(--signal-2)"></div></div></div>`).join('')}</div>
     <div class="row between mono xs faint" style="margin-top:6px"><span>${dtFmt(tl[0].t)}</span><span>${dtFmt(tl[tl.length - 1].t)}</span></div>` : '<div class="empty xs">Submissions appear here once the event starts.</div>';
-  return { title: e.name, html: `<div class="page">${head(d, esc(e.name), `${statusTag(e)} &nbsp;${dtFmt(e.starts_at)} → ${dtFmt(e.ends_at)}`, `<a class="btn" href="#/events/${esc(e.slug)}">${icon('eye')}Public page</a>${can ? (e.status === 'draft' ? '<button class="btn primary" data-act="publish">Publish</button>' : e.status === 'published' ? '<button class="btn" data-act="unpublish">Unpublish</button>' : '') : ''}`)}
+  return { title: e.name, html: `<div class="page">${head(d, esc(e.name), `${statusTag(e)} &nbsp;${dtFmt(e.starts_at)} → ${dtFmt(e.ends_at)}`, `<a class="btn" href="#/events/${esc(e.slug)}">${icon('eye')}Public page</a>${can ? `<a class="btn" href="#/manage/${esc(e.slug)}/settings">Edit event</a>${e.status === 'draft' ? '<button class="btn primary" data-act="publish">Publish</button>' : e.status === 'published' ? '<button class="btn" data-act="unpublish">Unpublish</button>' : ''}` : ''}`)}
+    ${can && e.status === 'draft' && blockers.length ? `<div class="notice warn" style="margin-bottom:20px">${icon('alert')}<div><b>Before you can publish:</b> ${blockers.map((c) => esc(c.label.toLowerCase())).join('; ')}. ${blockers.some((c) => /challenge|flag/i.test(c.label)) ? `<a class="link" href="#/manage/${esc(e.slug)}/challenges">Add or fix challenges</a>` : `<a class="link" href="#/manage/${esc(e.slug)}/settings">Edit event</a>`}</div></div>` : ''}
     ${e.status === 'suspended' ? `<div class="notice err" style="margin-bottom:20px">${icon('alert')}<div>Platform staff suspended this event. It is hidden and no submissions are accepted. Check your notifications for the reason.</div></div>` : ''}
     <div class="cells c5" style="margin-bottom:20px">${[['Teams', s.teams, s.pending ? `${s.pending} waiting for approval` : 'approved'], ['Participants', s.participants, 'people on approved teams'], ['Submissions', s.submissions, `${s.correct} correct (${s.submissions ? Math.round((s.correct / s.submissions) * 100) : 0}%)`], ['Solves', s.solves, `across ${s.challenges} challenges`], ['Integrity signals', s.openIncidents, s.openIncidents ? 'need review' : 'nothing open']].map(([k, v, h], i) => `<div class="cell metric ${i === 4 && v ? 'stripe-high' : ''}"><div class="label">${k}</div><div class="v">${fmt(v)}</div><div class="d">${h}</div></div>`).join('')}</div>
     <div class="cells c-main"><div><div class="cell-h"><h3>Submissions, 2-hour buckets</h3><span class="xs faint">last 30 hours</span></div><div class="cell">${bars}</div>
       <div class="cell-h" style="border-top:1px solid var(--rule)"><h3>Solves by category</h3></div><div class="cell">${hbars(d.byCategory.map((c) => [catName(c.category), c.n]))}</div></div>
-    <div><div class="cell-h"><h3>Publish checklist</h3></div><div class="cell stack tight">${d.checklist.map((c) => `<div class="row small">${c.ok ? icon('check', 14, 'ok') : icon('alert', 14, 'warn')}<span class="grow">${esc(c.label)}</span><span class="xs faint">${esc(c.detail || '')}</span></div>`).join('')}</div>
+    <div>${can ? `<div class="cell-h"><h3>Share link</h3></div><div class="cell stack tight"><div class="copyline"><span class="mono xs" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(shareLink(e))}</span><button class="btn ghost sm" data-act="copy" data-text="${esc(shareLink(e))}" aria-label="Copy link">${icon('copy')}</button></div>
+        <div class="row wrap"><button class="btn sm primary" data-act="sharelink" data-text="${esc(shareLink(e))}" data-name="${esc(e.name)}">${icon('copy')}Copy link</button><a class="btn sm" target="_blank" rel="noopener" href="https://wa.me/?text=${encodeURIComponent(`Register for ${e.name}: ${shareLink(e)}`)}">Share on WhatsApp</a></div>
+        <span class="xs dim">${e.status === 'published' ? 'Players open this link to see the event and register.' : 'Publish the event first. Until then this link only works for staff.'}</span></div>` : ''}
+      <div class="cell-h" ${can ? 'style="border-top:1px solid var(--rule)"' : ''}><h3>Publish checklist</h3></div><div class="cell stack tight">${d.checklist.map((c) => `<div class="row small">${c.ok ? icon('check', 14, 'ok') : icon('alert', 14, 'warn')}<span class="grow">${esc(c.label)}</span><span class="xs faint">${esc(c.detail || '')}</span></div>`).join('')}</div>
       ${can ? `<div class="cell-h" style="border-top:1px solid var(--rule)"><h3>Live controls</h3></div><div class="cell stack"><label class="check"><input type="checkbox" data-change="accepting" ${e.accepting ? 'checked' : ''}><span>Accept flag submissions</span></label>
         ${e.invite_code ? `<div><div class="label">Invitation code</div><div class="copyline" style="margin-top:6px"><span>${esc(e.invite_code)}</span><button class="btn ghost sm" data-act="copy" data-text="${esc(e.invite_code)}">${icon('copy')}</button></div></div>` : ''}</div>
       <div class="cell-h" style="border-top:1px solid var(--rule)"><h3>Results</h3></div><div class="cell stack tight">${['scoreboard.csv', 'solves.csv', 'submissions.csv'].map((k) => `<a class="btn sm" href="/api/manage/events/${esc(e.slug)}/export/${k}" download>${icon('download')}Export ${k}</a>`).join('')}
         <button class="btn sm primary" data-act="certs" ${e.phase !== 'ended' ? 'disabled title="Available after the event ends"' : ''}>Issue certificates</button>${e.phase !== 'ended' ? '<span class="xs faint">Certificates can be issued after the event ends.</span>' : ''}</div>` : ''}</div></div></div>` };
 } });
+onAct('sharelink', async (el) => {
+  const text = el.dataset.text;
+  if (navigator.share && matchMedia('(pointer: coarse)').matches) { try { await navigator.share({ title: el.dataset.name, text: `Register for ${el.dataset.name}`, url: text }); return; } catch { /* cancelled: fall back to copying */ } }
+  copy(text);
+});
 onAct('publish', async () => { if (!(await confirmDlg('Publish this event?', 'It becomes visible according to its visibility setting, and registration opens on schedule.', 'Publish'))) return; await api(`/manage/events/${ctx.params.slug}/publish`, { method: 'POST' }); confetti(); toast('Event published.'); refresh(); });
 onAct('unpublish', async () => { if (!(await confirmDlg('Unpublish this event?', 'It will be hidden from players until you publish again. Registrations are kept.', 'Unpublish', true))) return; await api(`/manage/events/${ctx.params.slug}/unpublish`, { method: 'POST' }); toast('Event moved back to draft.'); refresh(); });
 onChange('accepting', async (el) => { await api(`/manage/events/${ctx.params.slug}`, { method: 'PATCH', body: { accepting: el.checked } }); toast(el.checked ? 'Submissions are open.' : 'Submissions paused. Attempts are not counted.', el.checked ? 'ok' : 'info'); });
@@ -297,13 +309,23 @@ route('/manage/:slug/settings', { ...M, title: 'Settings', view: async ({ params
       <div class="form-error"></div><div><button class="btn primary" type="submit">Save settings</button></div></form>
     <div><div class="cell-h"><h3>Staff</h3></div><div class="cell stack tight">${d.staff.map((s) => `<div class="row between"><span class="row">${av(s.username)}<span>${esc(s.display_name || s.username)}<div class="xs dim mono">@${esc(s.username)}</div></span></span><span class="row">${tag(s.role)}${s.role !== 'owner' ? `<button class="btn ghost sm" data-act="staffdel" data-uid="${s.id}" aria-label="Remove">${icon('x')}</button>` : ''}</span></div>`).join('')}</div>
       <form class="cell stack tight" data-form="staffadd" style="border-top:1px solid var(--rule)"><div class="field"><label for="su">Add by username</label><input id="su" class="input mono" name="username" required></div><select class="select" name="role" aria-label="Role"><option value="organizer">Organizer — full control</option><option value="author">Author — challenges only</option><option value="moderator">Moderator — monitoring & integrity</option></select><div class="form-error"></div><div><button class="btn sm" type="submit">Add to staff</button></div></form>
-      <div class="cell" style="border-top:1px solid var(--rule)"><p class="xs dim">Organization members with organizer roles also manage this event automatically.</p></div></div></div></div>`;
+      <div class="cell" style="border-top:1px solid var(--rule)"><p class="xs dim">Organization members with organizer roles also manage this event automatically.</p></div>
+      ${['owner', 'admin'].includes(d.role) ? `<div class="cell-h" style="border-top:1px solid var(--rule)"><h3>Delete event</h3></div><div class="cell stack tight"><p class="small dim">Permanently removes this event and everything in it: challenges, files, registrations, submissions, scores, announcements and certificates. Use it to free up database space. This cannot be undone.</p><div><button class="btn danger sm" data-act="evdelete">Delete event…</button></div></div>` : ''}</div></div></div>`;
 } });
 onForm('esettings', async (f) => {
   const body = { ...f, hint_penalties: !!f.hint_penalties };
   for (const k of ['reg_opens_at', 'reg_closes_at', 'starts_at', 'ends_at', 'freeze_at']) body[k] = fromLocalInput(f[k]);
   for (const k of ['team_min', 'team_max', 'first_blood_pct', 'max_teams']) body[k] = f[k] === '' ? null : Number(f[k]);
   await api(`/manage/events/${ctx.params.slug}`, { method: 'PATCH', body }); toast('Settings saved.'); refresh();
+});
+onAct('evdelete', async () => {
+  const slug = ctx.params.slug;
+  const r = await dialog({ title: 'Delete this event?', body: `<p class="dim">This permanently deletes the event and all its challenges, files, registrations, submissions, scores, announcements and certificates. It cannot be undone.</p>
+    <div class="field"><label for="dc">Type <b class="mono">${esc(slug)}</b> to confirm</label><input id="dc" class="input mono" name="confirm" autocomplete="off" required></div><div class="form-error"></div>`,
+  actions: [{ label: 'Cancel', kind: 'ghost', value: null }, { label: 'Delete forever', kind: 'danger', value: 'go', submit: true, validate: (f) => { if (f.confirm.value.trim().toLowerCase() === slug) return true; f.querySelector('.form-error').innerHTML = `<div class="notice err">${icon('alert')}<div>Type ${esc(slug)} exactly.</div></div>`; return false; } }] });
+  if (r.value !== 'go') return;
+  await api(`/manage/events/${slug}`, { method: 'DELETE', body: { confirm: slug } });
+  sideExtra.manage = null; toast('Event deleted.'); go('/manage');
 });
 onForm('staffadd', async (f) => { await api(`/manage/events/${ctx.params.slug}/staff`, { method: 'POST', body: f }); toast('Staff member added.'); refresh(); });
 onAct('staffdel', async (el) => { if (!(await confirmDlg('Remove from staff?', 'They lose organizer access to this event.', 'Remove', true))) return; await api(`/manage/events/${ctx.params.slug}/staff/${el.dataset.uid}`, { method: 'DELETE' }); refresh(); });

@@ -12,6 +12,7 @@ import {
   hub, pushNotify, notifyTeam, memberIds, teamIdsOf,
 } from '../core.js';
 import { syncEventStaffToFirebase, removeEventStaffFromFirebase } from '../firebase.js';
+import { stopInstance } from '../instances.js';
 
 const r = Router();
 r.use('/manage', requireAuth);
@@ -168,6 +169,45 @@ r.post('/manage/events/:slug/unpublish', async (req, res) => {
   await update('events', { id: e.id }, { status: 'draft' }); await audit(req.user.id, 'event.unpublished', `event:${e.slug}`, {}, { eventId: e.id });
   res.json({ ok: true });
 });
+// Permanently deletes an event and everything stored for it, to free database and disk space.
+// Only the event owner or a platform admin, and only after typing the event's URL slug to confirm.
+r.delete('/manage/events/:slug', async (req, res) => {
+  const e = await ev(req, async (x, u) => ['admin', 'owner'].includes(await staffRole(x, u)));
+  if (String(req.body?.confirm || '').trim().toLowerCase() !== e.slug) throw bad(`Type the event URL "${e.slug}" to confirm.`, { field: 'confirm' });
+  const removed = await deleteEventData(e);
+  await audit(req.user.id, 'event.deleted', `event:${e.slug}`, { name: e.name, removed }, { eventId: e.id });
+  res.json({ ok: true, removed });
+});
+async function deleteEventData(e) {
+  const del = async (name, filter) => (await col(name).deleteMany(filter)).deletedCount;
+  const challengeIds = (await find('challenges', { event_id: e.id }, { projection: { id: 1 } })).map((c) => c.id);
+  const hintIds = (await find('hints', { challenge_id: { $in: challengeIds } }, { projection: { id: 1 } })).map((h) => h.id);
+  const incidentIds = (await find('incidents', { event_id: e.id }, { projection: { id: 1 } })).map((i) => i.id);
+  const files = await find('attachments', { challenge_id: { $in: challengeIds } }, { projection: { stored_name: 1 } });
+  const running = await find('instances', { challenge_id: { $in: challengeIds }, status: { $in: ['starting', 'running'] } });
+  for (const inst of running) await stopInstance(inst).catch((err) => console.error(`[manage] could not stop instance ${inst.id}:`, err.message));
+  const staff = await find('event_staff', { event_id: e.id }, { projection: { user_id: 1 } });
+  const removed = {
+    challenges: await del('challenges', { event_id: e.id }),
+    hints: await del('hints', { challenge_id: { $in: challengeIds } }),
+    hint_unlocks: await del('hint_unlocks', { hint_id: { $in: hintIds } }),
+    attachments: await del('attachments', { challenge_id: { $in: challengeIds } }),
+    instances: await del('instances', { challenge_id: { $in: challengeIds } }),
+    submissions: await del('submissions', { event_id: e.id }),
+    solves: await del('solves', { event_id: e.id }),
+    registrations: await del('registrations', { event_id: e.id }),
+    announcements: await del('announcements', { event_id: e.id }),
+    incident_notes: await del('incident_notes', { incident_id: { $in: incidentIds } }),
+    incidents: await del('incidents', { event_id: e.id }),
+    score_adjustments: await del('score_adjustments', { event_id: e.id }),
+    certificates: await del('certificates', { event_id: e.id }),
+    staff: await del('event_staff', { event_id: e.id }),
+  };
+  await col('events').deleteOne({ id: e.id });
+  for (const f of files) removeFile(f.stored_name);
+  for (const s of staff) removeEventStaffFromFirebase(e.id, s.user_id).catch(() => {});
+  return removed;
+}
 r.post('/manage/events/:slug/staff', async (req, res) => {
   const e = await ev(req, canManage); const u = await findOne('users', { username: String(req.body.username || '') }, { projection: { id: 1, username: 1 } });
   if (!u) throw bad('No user with that username.');

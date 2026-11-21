@@ -118,12 +118,12 @@ function appSide(c) {
   const adminOrgs = (me.orgs || []).filter((o) => ['owner', 'admin'].includes(o.role));
   if (adminOrgs.length) groups.push(['Organizations', adminOrgs.map((o) => [`/orgs/${o.slug}/admin`, o.name])]);
   if (me.role === 'admin') groups.push(['Platform', [['/admin', 'Overview'], ['/admin/users', 'Users'], ['/admin/orgs', 'Organizations'], ['/admin/events', 'Events'], ['/admin/audit', 'Audit log']]]);
-  return groups.map(([g, items]) => `<div class="grp label">${esc(g)}</div>${items.map(([h, l, n, a]) => sideLink(h, l, p === h, n, a)).join('')}`).join('');
+  return groups.map(([g, items]) => `<div class="grp label" role="heading" aria-level="2"><span>${esc(g)}</span></div>${items.map(([h, l, n, a]) => sideLink(h, l, p === h, n, a)).join('')}`).join('');
 }
 function arenaSide(c) {
   const a = sideExtra.arena; const s = c.params.slug; const p = c.path;
-  return `<div class="grp label">${esc(a?.name || 'Event')}</div>${[[`/arena/${s}`, 'Challenges'], [`/arena/${s}/scoreboard`, 'Scoreboard'], [`/arena/${s}/news`, 'Announcements'], [`/events/${s}`, 'Event page & rules']].map(([h, l]) => sideLink(h, l, p === h || (l === 'Challenges' && p.startsWith(`/arena/${s}/c/`)))).join('')}
-    <div class="grp label">You</div>${sideLink('/dashboard', 'Dashboard', false)}${sideLink('/teams', 'Teams', false)}
+  return `<div class="grp label" role="heading" aria-level="2"><span>${esc(a?.name || 'Event')}</span></div>${[[`/arena/${s}`, 'Challenges'], [`/arena/${s}/scoreboard`, 'Scoreboard'], [`/arena/${s}/news`, 'Announcements'], [`/events/${s}`, 'Event page & rules']].map(([h, l]) => sideLink(h, l, p === h || (l === 'Challenges' && p.startsWith(`/arena/${s}/c/`)))).join('')}
+    <div class="grp label" role="heading" aria-level="2"><span>You</span></div>${sideLink('/dashboard', 'Dashboard', false)}${sideLink('/teams', 'Teams', false)}
     ${a?.team ? `<div class="foot"><div class="label">${esc(a.team.name || 'Solo')}</div><div class="row between" style="margin-top:8px"><span class="dim small">Rank</span><span class="mono">#${a.team.rank} / ${a.team.of}</span></div><div class="row between"><span class="dim small">Points</span><span class="mono">${a.team.points}</span></div><div class="row between"><span class="dim small">Solved</span><span class="mono">${a.team.solved}</span></div></div>` : ''}`;
 }
 function footer() { return `<footer class="footer"><span>fs0cie<b>1y</b> · capture the flag platform · <span data-clock></span></span><span class="row wrap" style="gap:10px 18px"><a href="#/verify">Verify certificate</a><a href="#/orgs">Organizations</a><a href="#/events">Competitions</a><a href="#/manage/new">Host an event</a></span></footer>${rulerHtml(true)}`; }
