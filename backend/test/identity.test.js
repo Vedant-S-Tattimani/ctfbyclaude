@@ -4,7 +4,7 @@ import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
 
-process.env.NODE_ENV = 'test'; process.env.LOGIN_LIMIT_PER_IP = '1000'; process.env.FIREBASE_SIGNIN_PROVIDERS = 'google,github';
+process.env.NODE_ENV = 'test'; process.env.TURNSTILE_SECRET_KEY = ''; process.env.TURNSTILE_SITE_KEY = ''; process.env.SMTP_HOST = ''; process.env.LOGIN_LIMIT_PER_IP = '1000'; process.env.FIREBASE_SIGNIN_PROVIDERS = 'google,github';
 // Fixed web settings, so the result doesn't depend on what is in the developer's backend/.env.
 Object.assign(process.env, { FIREBASE_WEB_API_KEY: 'test-web-key', FIREBASE_AUTH_DOMAIN: 'example-test.firebaseapp.com', FIREBASE_PROJECT_ID: 'example-test', FIREBASE_APP_ID: '1:0:web:test' });
 const { config } = await import('../server/config.js');

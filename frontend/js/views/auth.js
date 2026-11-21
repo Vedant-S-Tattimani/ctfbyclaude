@@ -1,6 +1,7 @@
 // Sign up, sign in, two-factor, email verification, password reset (through Firebase Authentication), onboarding.
 import { api, route, state, go, loadMe, onForm, onAct, onChange, refresh } from '../core.js';
 import { esc, icon, toast, CAT } from '../ui.js';
+import { mountCaptcha } from '../captcha.js';
 import { firebase, signInWithEmail, signInWithProvider, signUpWithEmail, submitTwoFactor, hasPendingTwoFactor, sendPasswordReset } from '../firebase-auth.js';
 
 const side = `<div class="side-art"><div class="label">fs0cie1y</div><div><h2 style="font-size:34px;line-height:1.05">Every flag you submit<br>is checked on the server.</h2>
@@ -25,21 +26,26 @@ async function signedIn(r) {
   await loadMe(); toast(`Signed in as @${state.me.username}`);
   go(r.created || !state.me.onboarded ? '/onboarding' : after() || '/dashboard');
 }
+/** Draws the Turnstile captcha on the sign-in/sign-up page when the server has it turned on. */
+async function showCaptcha(root) {
+  const f = await firebase().catch(() => null);
+  await mountCaptcha(root.querySelector('.captcha'), f?.captchaSiteKey);
+}
 onAct('provider', async (el) => { el.disabled = true; try { await signedIn(await signInWithProvider(el.dataset.p)); } finally { el.disabled = false; } });
 
-route('/login', { shell: 'auth', title: 'Sign in', view: async () => wrap(`<h1>Sign in</h1><p class="dim" style="margin:6px 0 24px">Welcome back.</p>
+route('/login', { shell: 'auth', title: 'Sign in', view: async () => ({ html: wrap(`<h1>Sign in</h1><p class="dim" style="margin:6px 0 24px">Welcome back.</p>
   ${await signInOptions('Continue')}<form class="stack" data-form="login" novalidate><div class="field"><label for="l1">Email</label><input id="l1" class="input" type="email" name="email" autocomplete="email" required></div>
   <div class="field"><div class="row between"><label for="l2" class="flabel">Password</label><a class="xs link" href="#/forgot">Forgot password?</a></div><input id="l2" class="input" type="password" name="password" autocomplete="current-password" required></div>
-  <div class="form-error"></div><button class="btn primary lg" type="submit">Sign in</button></form>
-  <p class="small dim" style="margin-top:20px">New here? <a class="link" href="#/signup">Create an account</a></p>`) });
+  <div class="captcha"></div><div class="form-error"></div><button class="btn primary lg" type="submit">Sign in</button></form>
+  <p class="small dim" style="margin-top:20px">New here? <a class="link" href="#/signup">Create an account</a></p>`), mount: showCaptcha }) });
 onForm('login', async (f) => { await signedIn(await signInWithEmail(String(f.email || '').trim(), f.password || '')); });
 
-route('/signup', { shell: 'auth', title: 'Create account', view: async () => wrap(`<h1>Create your account</h1><p class="dim" style="margin:6px 0 24px">Free for players. Only username, email and password are required.</p>
+route('/signup', { shell: 'auth', title: 'Create account', view: async () => ({ html: wrap(`<h1>Create your account</h1><p class="dim" style="margin:6px 0 24px">Free for players. Only username, email and password are required.</p>
   ${await signInOptions('Sign up')}<form class="stack" data-form="signup" novalidate><div class="field"><label for="s1">Email</label><input id="s1" class="input" type="email" name="email" autocomplete="email" required></div>
   <div class="field"><label for="s2">Username</label><input id="s2" class="input mono" name="username" autocomplete="username" required pattern="[A-Za-z0-9_]{3,20}"><span class="hint">3–20 letters, numbers or underscores. Shown on scoreboards.</span></div>
   <div class="field"><label for="s3">Password</label><input id="s3" class="input" type="password" name="password" autocomplete="new-password" required minlength="10" data-input="pwmeter"><span class="hint" id="pwh">At least 10 characters. A passphrase works well.</span></div>
-  <div class="form-error"></div><button class="btn primary lg" type="submit">Create account</button></form>
-  <p class="small dim" style="margin-top:20px">Already registered? <a class="link" href="#/login">Sign in</a></p>`) });
+  <div class="captcha"></div><div class="form-error"></div><button class="btn primary lg" type="submit">Create account</button></form>
+  <p class="small dim" style="margin-top:20px">Already registered? <a class="link" href="#/login">Sign in</a></p>`), mount: showCaptcha }) });
 onChange('pwmeter', (el) => { const v = el.value; const s = (v.length >= 10) + (v.length >= 14) + (/\d/.test(v) && /[a-z]/i.test(v)) + (/[^a-z0-9]/i.test(v)); document.getElementById('pwh').textContent = ['At least 10 characters. A passphrase works well.', 'Too short.', 'Fair — longer is better.', 'Strong.', 'Very strong.'][v.length < 10 && v ? 1 : s]; });
 onForm('signup', async (f) => {
   const username = String(f.username || '').trim();
@@ -56,8 +62,8 @@ route('/2fa', { shell: 'auth', title: 'Two-factor authentication', view: () => (
 mount: () => document.getElementById('c1')?.focus() });
 onForm('twofa', async (f) => { await submitTwoFactor(String(f.code || '').trim()); await loadMe(); toast('Signed in.'); go(after() || '/dashboard'); });
 
-route('/forgot', { shell: 'auth', title: 'Reset password', view: () => wrap(`<h1>Reset your password</h1><p class="dim" style="margin:6px 0 24px">We'll email you a link to choose a new password.</p>
-  <form class="stack" data-form="forgot" novalidate><div class="field"><label for="f1">Email</label><input id="f1" class="input" type="email" name="email" required></div><div class="form-error"></div><button class="btn primary lg" type="submit">Send reset link</button></form><div id="fres" style="margin-top:16px"></div>`) });
+route('/forgot', { shell: 'auth', title: 'Reset password', view: () => ({ html: wrap(`<h1>Reset your password</h1><p class="dim" style="margin:6px 0 24px">We'll email you a link to choose a new password.</p>
+  <form class="stack" data-form="forgot" novalidate><div class="field"><label for="f1">Email</label><input id="f1" class="input" type="email" name="email" required></div><div class="captcha"></div><div class="form-error"></div><button class="btn primary lg" type="submit">Send reset link</button></form><div id="fres" style="margin-top:16px"></div>`), mount: showCaptcha }) });
 onForm('forgot', async (f) => {
   await sendPasswordReset(String(f.email || '').trim());
   document.getElementById('fres').innerHTML = `<div class="notice ok">${icon('check')}<div>If an account uses that address, a reset link is on its way. Check your spam folder too.</div></div>`;

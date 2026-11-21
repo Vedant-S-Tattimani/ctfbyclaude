@@ -9,6 +9,7 @@ import { initFirebase } from './firebase.js';
 import { startReaper } from './instances.js';
 import { requestCache } from './core.js';
 import { bootstrapAdmin } from '../scripts/bootstrap.js';
+import { checkMailer } from './mailer.js';
 import { HttpError, sessionMiddleware, csrfGuard } from './lib.js';
 import authRoutes from './routes/auth.js';
 import eventRoutes from './routes/events.js';
@@ -40,12 +41,14 @@ export function createApp() {
     if (!config.corsOrigin) {
       // Firebase sign-in: the pinned SDK loads from www.gstatic.com, talks to Google's identity APIs, and Google/GitHub
       // sign-in runs in a popup with a helper frame on the project's auth domain (set up by Google's api.js loader).
-      const authFrame = config.firebaseWeb.authDomain ? ` https://${config.firebaseWeb.authDomain}` : '';
+      // Cloudflare Turnstile (captcha) loads its script and widget frame from challenges.cloudflare.com.
+      const turnstile = config.turnstileSiteKey ? ' https://challenges.cloudflare.com' : '';
+      const frames = `${config.firebaseWeb.authDomain ? ` https://${config.firebaseWeb.authDomain}` : ''}${turnstile}`;
       res.setHeader('Content-Security-Policy', [
-        "default-src 'self'", "script-src 'self' https://www.gstatic.com/firebasejs/13.1.0/ https://apis.google.com", "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+        "default-src 'self'", `script-src 'self' https://www.gstatic.com/firebasejs/13.1.0/ https://apis.google.com${turnstile}`, "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
         "font-src 'self' https://fonts.gstatic.com", "img-src 'self' data: blob:",
         "connect-src 'self' https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://www.googleapis.com",
-        `frame-src${authFrame || " 'none'"}`, "frame-ancestors 'none'", "base-uri 'self'", "form-action 'self'",
+        `frame-src${frames || " 'none'"}`, "frame-ancestors 'none'", "base-uri 'self'", "form-action 'self'",
       ].join('; '));
     }
     if (config.prod) res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
@@ -85,5 +88,6 @@ if (process.argv[1] && path.resolve(process.argv[1]) === path.join(ROOT, 'server
     console.log(`CipherArena listening on ${config.baseUrl}`);
     console.log(`Database: MongoDB "${config.mongoDb}". Instances: ${config.instanceProvider}.`);
     console.log(`Frontend: ${fs.existsSync(config.frontendDir) ? config.frontendDir : 'not found (API-only mode)'}`);
+    checkMailer();
   });
 }

@@ -4,7 +4,7 @@ import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
 
-process.env.NODE_ENV = 'test'; process.env.EXPOSE_DEV_LINKS = '1'; process.env.LOGIN_LIMIT_PER_IP = '1000';
+process.env.NODE_ENV = 'test'; process.env.TURNSTILE_SECRET_KEY = ''; process.env.TURNSTILE_SITE_KEY = ''; process.env.SMTP_HOST = ''; process.env.EXPOSE_DEV_LINKS = '1'; process.env.LOGIN_LIMIT_PER_IP = '1000';
 const { config } = await import('../server/config.js');
 const { connectDb, closeDb, dropDb, findOne, count } = await import('../server/db.js');
 const { createApp } = await import('../server/index.js');
@@ -36,6 +36,17 @@ function client() {
 // Signs in the way the browser does after Firebase: hand the server a fresh ID token.
 const login = async (u) => { const c = client(); const r = await c('/auth/firebase', { method: 'POST', body: { idToken: fake.idToken(uidOf(u)) } }); assert.equal(r.status, 200, JSON.stringify(r.data)); return c; };
 
+test('forgot password emails existing accounts only, and answers the same either way', async () => {
+  const acct = fake.addAccount({ email: 'Reset.Me@x.test' });
+  const c = client();
+  const known = await c('/auth/forgot', { method: 'POST', body: { email: 'reset.me@x.test' } });
+  const unknown = await c('/auth/forgot', { method: 'POST', body: { email: 'nobody@x.test' } });
+  assert.equal(known.status, 200); assert.deepEqual(known.data, unknown.data);
+  assert.deepEqual(fake.resetEmails, [acct.uid]);
+  assert.equal((await c('/auth/forgot', { method: 'POST', body: { email: 'not-an-email' } })).status, 400);
+  for (let i = 0; i < 3; i++) await c('/auth/forgot', { method: 'POST', body: { email: 'reset.me@x.test' } });
+  assert.equal(fake.resetEmails.length, 3, 'at most 3 reset emails per address per hour');
+});
 test('CSRF header is required for mutations', async () => {
   const r = await fetch(`${base}/auth/firebase`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
   assert.equal(r.status, 403);
@@ -45,6 +56,8 @@ test('first Firebase sign-in with a username creates the profile; verification i
   const c = client();
   const r = await c('/auth/firebase', { method: 'POST', body: { idToken: fake.idToken(acct.uid), username: 'newbie_1' } });
   assert.equal(r.status, 200, JSON.stringify(r.data)); assert.equal(r.data.created, true);
+  await new Promise((r) => setImmediate(r)); // the verification email is sent in the background
+  assert.ok(fake.verificationEmails.includes(acct.uid), 'sign-up sends the verification email from the server');
   let me = (await c('/auth/me')).data.user; assert.equal(me.username, 'newbie_1'); assert.equal(me.emailVerified, false);
   assert.equal((await c('/auth/resend-verification', { method: 'POST' })).status, 200); assert.ok(fake.verificationEmails.includes(acct.uid));
   acct.emailVerified = true; // the person clicks the link in the email

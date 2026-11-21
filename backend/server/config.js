@@ -65,6 +65,19 @@ export const config = {
     appId: process.env.FIREBASE_APP_ID || '',
   },
   // Sign-in buttons to show besides email/password. Enable the same providers in Firebase > Authentication > Sign-in method.
+  // Cloudflare Turnstile captcha on sign-in/sign-up. The site key is public; the secret key stays on the server.
+  // Leave both empty to turn the captcha off.
+  turnstileSiteKey: process.env.TURNSTILE_SITE_KEY || '',
+  turnstileSecret: process.env.TURNSTILE_SECRET_KEY || '',
+  // Outgoing email through Nodemailer (SMTP). Gmail: smtp.gmail.com, port 465, your address and a Google App Password.
+  // When unset, Firebase sends the verification and password-reset emails instead.
+  smtp: {
+    host: process.env.SMTP_HOST || '',
+    port: Number(process.env.SMTP_PORT || 465),
+    user: process.env.SMTP_USER || '',
+    pass: (process.env.SMTP_PASS || '').replace(/\s+/g, ''), // Google shows App Passwords with spaces
+  },
+  mailFrom: process.env.MAIL_FROM || (process.env.SMTP_USER ? `fs0cie1y <${process.env.SMTP_USER}>` : ''),
   signInProviders: (process.env.FIREBASE_SIGNIN_PROVIDERS ?? 'google').split(',').map((s) => s.trim().toLowerCase()).filter((s) => ['google', 'github'].includes(s)),
 };
 fs.mkdirSync(config.uploadDir, { recursive: true });

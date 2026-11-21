@@ -9,6 +9,8 @@ import { getAuth } from 'firebase-admin/auth';
 import { config } from './config.js';
 import { getFirebaseApp, getFirebaseDb } from './firebase.js';
 import { HttpError, sha256 } from './lib.js';
+import { mailConfigured, sendMail } from './mailer.js';
+import { verifyEmail, resetPassword } from './email-templates.js';
 
 const FIREBASE_MAX_SESSION_MS = 14 * 86400_000; // Firebase caps session cookies at two weeks
 const REVOCATION_RECHECK_MS = 60_000; // how long a verified session is trusted before Firebase is asked again
@@ -129,15 +131,39 @@ export async function signInMethods(uid) {
   return (u.providerData || []).map((p) => ({ providerId: p.providerId, email: p.email || null, displayName: p.displayName || null }));
 }
 
-/** Emails a fresh verification link through Firebase. */
+/** Emails a fresh verification link: through Nodemailer when SMTP is set up, otherwise through Firebase. */
 export async function sendVerificationEmail(uid) {
   if (fake) return fake.sendVerificationEmail(uid);
+  if (mailConfigured()) {
+    const { email } = await getAccount(uid);
+    if (!email) throw new HttpError(400, 'This account has no email address.');
+    const link = await auth().generateEmailVerificationLink(email);
+    await sendMail({ to: email, ...verifyEmail(link) });
+    return;
+  }
   const key = config.firebaseWeb.apiKey;
   if (!key) throw new HttpError(503, 'Email verification needs FIREBASE_WEB_API_KEY on the server.');
   // Firebase only sends verification emails on behalf of a signed-in user, so sign in as them server-side.
   const token = await auth().createCustomToken(uid);
   const signIn = await identityToolkit(`accounts:signInWithCustomToken?key=${key}`, { token, returnSecureToken: true });
   await identityToolkit(`accounts:sendOobCode?key=${key}`, { requestType: 'VERIFY_EMAIL', idToken: signIn.idToken });
+}
+/**
+ * Emails a password-reset link if an account uses this address (silently does nothing otherwise, so the
+ * response can't reveal which emails have accounts). Nodemailer when SMTP is set up, otherwise Firebase.
+ */
+export async function sendPasswordResetEmail(email) {
+  if (fake) return fake.sendPasswordResetEmail(email);
+  const account = await findAccountByEmail(email);
+  if (!account?.email || account.disabled) return;
+  if (mailConfigured()) {
+    const link = await auth().generatePasswordResetLink(account.email);
+    await sendMail({ to: account.email, ...resetPassword(link) });
+    return;
+  }
+  const key = config.firebaseWeb.apiKey;
+  if (!key) throw new HttpError(503, 'Password reset needs FIREBASE_WEB_API_KEY on the server.');
+  await identityToolkit(`accounts:sendOobCode?key=${key}`, { requestType: 'PASSWORD_RESET', email: account.email });
 }
 async function identityToolkit(path, body) {
   const res = await fetch(`https://identitytoolkit.googleapis.com/v1/${path}`, {

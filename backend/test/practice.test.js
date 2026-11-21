@@ -8,7 +8,7 @@ import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
 import zlib from 'node:zlib';
 
-process.env.NODE_ENV = 'test'; process.env.EXPOSE_DEV_LINKS = '1'; process.env.LOGIN_LIMIT_PER_IP = '1000';
+process.env.NODE_ENV = 'test'; process.env.TURNSTILE_SECRET_KEY = ''; process.env.TURNSTILE_SITE_KEY = ''; process.env.SMTP_HOST = ''; process.env.EXPOSE_DEV_LINKS = '1'; process.env.LOGIN_LIMIT_PER_IP = '1000';
 const { config } = await import('../server/config.js');
 const { connectDb, closeDb, dropDb, count, find } = await import('../server/db.js');
 const { createApp } = await import('../server/index.js');

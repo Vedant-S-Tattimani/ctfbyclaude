@@ -8,16 +8,19 @@
 import { Router } from 'express';
 import { config } from '../config.js';
 import { findOne, count, insert, update, byIds, find, now, audit } from '../db.js';
-import { HttpError, bad, str, USERNAME_RE, requireAuth, rateHit, rateCount, verifyTotp, newTotpSecret, selfUser, setSessionCookie, clearSessionCookie, randomToken, parseCookies, COOKIE } from '../lib.js';
+import { HttpError, bad, str, EMAIL_RE, USERNAME_RE, requireAuth, rateHit, rateCount, verifyTotp, newTotpSecret, selfUser, setSessionCookie, clearSessionCookie, randomToken, parseCookies, COOKIE } from '../lib.js';
 import {
-  identityConfigured, verifySignIn, createSessionCookie, endSession, revokeSessions, signInMethods, sendVerificationEmail, getAccount, getTotpSecrets, setTotpSecrets,
+  identityConfigured, verifySignIn, createSessionCookie, endSession, revokeSessions, signInMethods, sendVerificationEmail, sendPasswordResetEmail, getAccount, getTotpSecrets, setTotpSecrets,
 } from '../identity.js';
 import { syncUserToFirebase } from '../firebase.js';
+import { verifyCaptcha, captchaEnabled } from '../captcha.js';
 
 const r = Router();
 const TWO_FA_FAILURES = 6; // wrong codes per account per 5 minutes
 const TWO_FA_FAILURES_PER_IP = 20; // wrong codes per IP per 10 minutes, across accounts
 const VERIFY_EMAILS_PER_HOUR = 3;
+const RESETS_PER_IP = 10; // password-reset requests per IP per hour
+const RESETS_PER_EMAIL = 3; // per address per hour
 const PROVIDER_LABEL = { password: 'Email and password', 'google.com': 'Google', 'github.com': 'GitHub' };
 
 const signInLimit = (req) => {
@@ -29,7 +32,8 @@ const signInLimit = (req) => {
 r.get('/auth/config', (_req, res) => {
   const web = config.firebaseWeb;
   const ready = identityConfigured() && !!web.apiKey && !!web.authDomain;
-  res.json({ ready, firebase: ready ? web : null, providers: ready ? config.signInProviders : [] });
+  const captchaSiteKey = captchaEnabled() && config.turnstileSiteKey ? config.turnstileSiteKey : null;
+  res.json({ ready, firebase: ready ? web : null, providers: ready ? config.signInProviders : [], captchaSiteKey });
 });
 
 r.get('/auth/check-username', async (req, res) => {
@@ -100,15 +104,36 @@ async function startSession(res, req, user, idToken, provider) {
 /* ---------- sign in ---------- */
 r.post('/auth/firebase', async (req, res) => {
   signInLimit(req);
+  // Captcha for new sign-ins and sign-ups. Someone already signed in (e.g. after changing their password) skips it.
+  if (!req.user) await verifyCaptcha(req.body?.captchaToken, req.ip);
   const claims = await verifySignIn(req.body?.idToken);
   const { user, created } = await profileFor(claims, req.body?.username);
   if (user.status !== 'active') throw new HttpError(403, 'This account is suspended. Contact support to appeal.');
   // Keep the searchable copy of the email in step with Firebase.
   const mirror = { email: claims.email || user.email, email_verified: claims.email_verified ? 1 : 0 };
   if (mirror.email !== user.email || mirror.email_verified !== user.email_verified) await update('users', { id: user.id }, mirror);
+  // New email/password accounts get their verification email from the server (Nodemailer, or Firebase as fallback).
+  if (created && mirror.email && !mirror.email_verified) {
+    rateHit(`verify:${user.id}`, VERIFY_EMAILS_PER_HOUR, 3600_000);
+    sendVerificationEmail(claims.uid).catch((e) => console.error(`[signin] verification email for user ${user.id} failed:`, e.message));
+  }
   if (user.totp_enabled) return res.json({ ok: true, twoFactor: true });
   await startSession(res, req, { ...user, ...mirror }, req.body.idToken, claims.firebase?.sign_in_provider);
   res.json({ ok: true, twoFactor: false, created });
+});
+
+/* ---------- forgot password ---------- */
+// Always answers the same way, so it can't be used to find out which emails have accounts.
+r.post('/auth/forgot', async (req, res) => {
+  const email = String(req.body?.email || '').trim().toLowerCase();
+  if (!EMAIL_RE.test(email) || email.length > 254) throw bad('Enter a valid email address.');
+  if (!req.user) await verifyCaptcha(req.body?.captchaToken, req.ip); // Settings > "set a password" is already signed in
+  const ipLim = rateHit(`reset-ip:${req.ip}`, RESETS_PER_IP, 3600_000);
+  if (!ipLim.ok) throw new HttpError(429, 'Too many reset requests. Try again later.');
+  if (rateHit(`reset:${email}`, RESETS_PER_EMAIL, 3600_000).ok) {
+    try { await sendPasswordResetEmail(email); } catch (e) { console.error('[signin] password reset email failed:', e.message); }
+  }
+  res.json({ ok: true });
 });
 
 r.post('/auth/2fa', async (req, res) => {

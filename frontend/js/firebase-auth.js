@@ -3,6 +3,7 @@
 // Firebase uses in-memory persistence here: nothing is written to localStorage, and the Firebase sign-in is dropped
 // as soon as the server session exists, so page scripts never have a long-lived credential to steal.
 import { api } from './core.js';
+import { getCaptchaToken, resetCaptcha } from './captcha.js';
 
 const SDK = 'https://www.gstatic.com/firebasejs/13.1.0';
 const MESSAGES = {
@@ -24,10 +25,10 @@ let loading = null;
 export function firebase() {
   loading ||= (async () => {
     const cfg = await api('/auth/config');
-    if (!cfg.ready) return { ready: false, providers: [] };
+    if (!cfg.ready) return { ready: false, providers: [], captchaSiteKey: null };
     const [{ initializeApp }, A] = await Promise.all([import(`${SDK}/firebase-app.js`), import(`${SDK}/firebase-auth.js`)]);
     const auth = A.initializeAuth(initializeApp(cfg.firebase), { persistence: A.inMemoryPersistence, popupRedirectResolver: A.browserPopupRedirectResolver });
-    return { ready: true, providers: cfg.providers, auth, A };
+    return { ready: true, providers: cfg.providers, captchaSiteKey: cfg.captchaSiteKey || null, auth, A };
   })().catch((e) => { loading = null; throw friendly(e); });
   return loading;
 }
@@ -56,12 +57,14 @@ async function complete(user, extra = {}) {
 
 export async function signInWithEmail(email, password) {
   const { auth, A } = await sdk();
-  try { return await complete((await A.signInWithEmailAndPassword(auth, email, password)).user); } catch (e) { throw e.status ? e : friendly(e); }
+  const captchaToken = getCaptchaToken(); // before Firebase, so a missing check doesn't cost a password attempt
+  try { return await complete((await A.signInWithEmailAndPassword(auth, email, password)).user, { captchaToken }); } catch (e) { throw e.status ? e : friendly(e); } finally { resetCaptcha(); }
 }
 
 export async function signInWithProvider(id) {
   const { auth, A } = await sdk();
-  try { return await complete((await A.signInWithPopup(auth, provider(A, id))).user); } catch (e) { throw e.status ? e : friendly(e); }
+  const captchaToken = getCaptchaToken();
+  try { return await complete((await A.signInWithPopup(auth, provider(A, id))).user, { captchaToken }); } catch (e) { throw e.status ? e : friendly(e); } finally { resetCaptcha(); }
 }
 
 /** Creates the Firebase account, emails a verification link, and creates the profile with the chosen username. */
@@ -69,15 +72,15 @@ export async function signUpWithEmail(email, password, username) {
   const { auth, A } = await sdk();
   const { available } = await api(`/auth/check-username?username=${encodeURIComponent(username)}`);
   if (!available) throw Object.assign(new Error('That username is taken.'), { data: { field: 'username' } });
+  const captchaToken = getCaptchaToken();
   let user;
-  try { user = (await A.createUserWithEmailAndPassword(auth, email, password)).user; } catch (e) { throw friendly(e); }
+  try { user = (await A.createUserWithEmailAndPassword(auth, email, password)).user; } catch (e) { resetCaptcha(); throw friendly(e); }
   try {
-    await A.sendEmailVerification(user).catch(() => {}); // they can resend from the verify page
-    return await complete(user, { username });
+    return await complete(user, { username, captchaToken }); // the server emails the verification link
   } catch (e) {
     await A.deleteUser(user).catch(() => {}); // don't leave a Firebase account without a profile behind
     throw e.status ? e : friendly(e);
-  }
+  } finally { resetCaptcha(); }
 }
 
 export async function submitTwoFactor(code) {
@@ -88,9 +91,10 @@ export async function submitTwoFactor(code) {
   await A.signOut(auth);
 }
 
+/** Asks the server to email a reset link (it answers the same whether or not the email has an account). */
 export async function sendPasswordReset(email) {
-  const { auth, A } = await sdk();
-  try { await A.sendPasswordResetEmail(auth, email); } catch (e) { if (e?.code !== 'auth/user-not-found') throw friendly(e); }
+  const captchaToken = getCaptchaToken();
+  try { await api('/auth/forgot', { method: 'POST', body: { email, captchaToken } }); } finally { resetCaptcha(); }
 }
 
 export async function signOutEverywhere() {

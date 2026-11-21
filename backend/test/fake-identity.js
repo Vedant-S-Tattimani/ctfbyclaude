@@ -14,7 +14,7 @@ const dec = (s) => {
 const fail = (code) => Object.assign(new Error(code), { code });
 
 export class FakeFirebase {
-  constructor() { this.accounts = new Map(); this.totp = new Map(); this.verificationEmails = []; this.imports = []; this.seq = 0; this.clock = 0; }
+  constructor() { this.accounts = new Map(); this.totp = new Map(); this.verificationEmails = []; this.resetEmails = []; this.imports = []; this.seq = 0; this.clock = 0; }
   tick() { this.clock = Math.max(Date.now(), this.clock + 1); return this.clock; } // strictly increasing ms
 
   addAccount({ uid = `fake-${++this.seq}`, email, emailVerified = true, displayName, providers = ['password'], disabled = false, passwordHash }) {
@@ -77,6 +77,10 @@ export class FakeFirebase {
   }
   async createCustomToken(uid) { return `fake-custom.${uid}`; }
   async sendVerificationEmail(uid) { this.verificationEmails.push(uid); }
+  async sendPasswordResetEmail(email) {
+    const a = [...this.accounts.values()].find((x) => x.email && x.email.toLowerCase() === String(email).toLowerCase());
+    if (a && !a.disabled) this.resetEmails.push(a.uid);
+  }
   async getTotp(uid) { return { ...(this.totp.get(uid) || {}) }; }
   async setTotp(uid, value) { if (value && Object.keys(value).length) this.totp.set(uid, { ...value }); else this.totp.delete(uid); }
 }
